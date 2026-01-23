@@ -9,8 +9,9 @@ from dotenv import load_dotenv
 # Daftar URL Feed RSS Berita
 # Masukkan dalam format list (kurung siku) dipisahkan koma
 RSS_URLS = [
-    'https://www.antaranews.com/rss/terkini.xml',
-    # 'https://www.cnnindonesia.com/nasional/rss',
+    # Menggunakan Google News Proxy untuk Cryptoslate karena proteksi anti-bot
+    'https://www.theblock.co/rss.xml',
+    'https://decrypt.co/feed',
 ]
 
 # Jeda waktu antar pesan (detik)

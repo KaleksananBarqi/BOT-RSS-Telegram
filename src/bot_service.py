@@ -61,12 +61,9 @@ class BotService:
         # Cara paling bersih: <a href="LINK"><b>JUDUL</b></a>
         
         if iv_link:
-            message_text += f"<a href='{iv_link}'><b>{title}</b></a>\n\n"
+            message_text += f"<a href='{iv_link}'><b>{title}</b></a>"
         else:
-            message_text += f"<a href='{link}'><b>{title}</b></a>\n\n"
-            
-        message_text += f"{summary}\n"
-        message_text += f"<a href='{link}'>Baca Selengkapnya</a>"
+            message_text += f"<a href='{link}'><b>{title}</b></a>"
 
         # Jika kita ingin memaksa gambar thumbnail spesifik muncul di link preview (jika IV gagal/tidak ada),
         # susah dikontrol sepenuhnya dari bot API kecuali website target mendukungnya.

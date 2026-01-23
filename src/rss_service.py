@@ -73,20 +73,40 @@ class RSSService:
         return None
 
     def fetch_feed(self, url):
-        """Mengambil dan memparsing data RSS."""
+        """Mengambil dan memparsing data RSS dengan requests + headers."""
         print(f"Fetching feed from: {url}")
-        feed = feedparser.parse(url)
         
+        # Headers untuk meniru browser asli
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Accept-Encoding': 'gzip, deflate, br'
+        }
+
+        try:
+            # Gunakan requests untuk mengambil konten raw
+            import requests # Lazy import to avoid top-level dependency if not used elsewhere often
+            response = requests.get(url, headers=headers, timeout=15)
+            
+            if response.status_code == 200:
+                feed = feedparser.parse(response.content)
+            elif response.status_code in [403, 429]:
+                print(f"Warning: Access denied (HTTP {response.status_code}). Site might be blocking bots.")
+                return []
+            else:
+                print(f"Warning: Failed to fetch feed (HTTP {response.status_code})")
+                return []
+
+        except Exception as e:
+            print(f"Error fetching feed via requests: {e}")
+            # Fallback ke feedparser standard jika requests gagal total
+            feed = feedparser.parse(url)
+
         if feed.bozo:
              print(f"Warning: Error parsing feed: {feed.bozo_exception}")
 
-        entries = []
-        # Proses dari yang terlama ke terbaru jika ingin urutan kronologis,
-        # tapi biasanya RSS sudah urut. Kita ambil apa adanya, nanti main loop yang atur.
-        # Biasanya RSS list item pertama adalah yang terbaru.
-        # Kitabalik listnya agar kita mengirim dari yang "paling lama yang belum dikirim" ke "terbaru" 
-        # saat iterasi di main loop, ATAU main loop handle reverse.
-        # Mari kita return raw entries dulu.
         return feed.entries
 
     def parse_entry(self, entry):
