@@ -8,12 +8,12 @@ from dotenv import load_dotenv
 
 # RSS Feed URLs
 RSS_URLS = [
-    'https://pintu.co.id/news/categories/analisis-pasar/rss-feed.xml',
     'https://cryptoharian.com/feed/',
     'https://www.crisisgroup.org/rss',
     'https://decrypt.co/feed',
     'https://id.beincrypto.com/feed/',
     'https://www.investing.com/rss/news_287.rss',
+    'https://www.cnbc.com/id/10000664/device/rss/rss.html'
 ]
 
 # Delay between posts (seconds)
@@ -26,7 +26,7 @@ CHECK_INTERVAL_HOURS = 1
 IV_RHASH = ''
 
 # Max age of news to process (hours)
-MAX_NEWS_AGE_HOURS = 12
+MAX_NEWS_AGE_HOURS = 1
 
 # ==========================================
 # System Configuration
