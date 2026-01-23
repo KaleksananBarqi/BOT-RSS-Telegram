@@ -1,8 +1,9 @@
 import asyncio
+from datetime import datetime, timedelta
 
 import signal
 import sys
-from config.config import RSS_URLS, DELAY_BETWEEN_POSTS, CHECK_INTERVAL, MAX_NEWS_AGE_HOURS
+from config.config import RSS_URLS, DELAY_BETWEEN_POSTS, CHECK_INTERVAL_HOURS, MAX_NEWS_AGE_HOURS
 from src.rss_service import RSSService
 from src.bot_service import BotService
 
@@ -72,8 +73,30 @@ async def main():
 
         # Wait for next check cycle
         if running:
-            for _ in range(CHECK_INTERVAL):
-                if not running: break
+            now = datetime.now()
+            # Hitung waktu target berikutnya (round up ke jam terdekat sesuai interval)
+            # Contoh: Interval 1 jam, sekarang 13:15 -> Target 14:00
+            # Contoh: Interval 2 jam, sekarang 13:15 -> Target 14:00 (13 ganjil, next genap)
+            
+            # Logic: Cari "base hour" saat ini, tambah selisih untuk mencapai kelipatan interval berikutnya
+            hours_to_add = CHECK_INTERVAL_HOURS - (now.hour % CHECK_INTERVAL_HOURS)
+            
+            # Reset menit/detik ke 0 untuk dapat jam "teng"
+            current_hour_floor = now.replace(minute=0, second=0, microsecond=0)
+            target_time = current_hour_floor + timedelta(hours=hours_to_add)
+            
+            wait_seconds = (target_time - now).total_seconds()
+            
+            # Safety buffer jika kalkulasi aneh (negatif atau 0), minimal 1 detik
+            if wait_seconds <= 0:
+                wait_seconds = 1
+
+            print(f"Menunggu {int(wait_seconds // 60)} menit dan {int(wait_seconds % 60)} detik hingga pukul {target_time.strftime('%H:%M')}...")
+
+            # Wait loop dengan interrupt check
+            # Kita loop per 1 detik agar bisa di-break (Ctrl+C)
+            end_time = datetime.now().timestamp() + wait_seconds
+            while running and datetime.now().timestamp() < end_time:
                 await asyncio.sleep(1)
 
     print("Bot stopped successfully.")

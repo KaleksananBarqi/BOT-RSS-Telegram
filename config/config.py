@@ -8,15 +8,19 @@ from dotenv import load_dotenv
 
 # RSS Feed URLs
 RSS_URLS = [
-    'https://pintu.co.id/news/categories/crypto-dan-blockchain/rss-feed.xml',
+    'https://pintu.co.id/news/categories/analisis-pasar/rss-feed.xml',
     'https://cryptoharian.com/feed/',
+    'https://www.crisisgroup.org/rss',
+    'https://decrypt.co/feed',
+    'https://id.beincrypto.com/feed/',
+    'https://www.investing.com/rss/news_287.rss',
 ]
 
 # Delay between posts (seconds)
 DELAY_BETWEEN_POSTS = 2
 
-# Check interval (seconds)
-CHECK_INTERVAL = 3600
+# Check interval (hours)
+CHECK_INTERVAL_HOURS = 1
 
 # Instant View RHASH (Optional)
 IV_RHASH = ''
