@@ -3,8 +3,8 @@ import json
 import os
 import ssl
 from bs4 import BeautifulSoup
-from datetime import datetime
-import time
+from datetime import datetime, timedelta, timezone
+
 
 # Workaround for SSL issues on some systems
 if hasattr(ssl, '_create_unverified_context'):
@@ -32,7 +32,7 @@ class RSSService:
         # Ensure directory exists
         os.makedirs(os.path.dirname(self.history_file), exist_ok=True)
         with open(self.history_file, 'w') as f:
-            json.dump(self.history, f)
+            json.dump(self.history, f, indent=4)
 
     def is_new(self, entry_id):
         """Mengecek apakah berita ini baru."""
@@ -71,6 +71,31 @@ class RSSService:
                 return img_tag['src']
         
         return None
+
+    def filter_entries_by_age(self, entries, max_hours):
+        """Memfilter berita berdasarkan umur (jam)."""
+        if not max_hours:
+            return entries
+            
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=max_hours)
+        valid_entries = []
+        
+        for entry in entries:
+            # published_parsed is a struct_time in UTC (from feedparser)
+            if hasattr(entry, 'published_parsed') and entry.published_parsed:
+                try:
+                    # Convert struct_time to aware datetime (UTC)
+                    entry_time = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
+                    if entry_time >= cutoff_time:
+                        valid_entries.append(entry)
+                except Exception:
+                    # Jika gagal parsing tanggal, anggap valid agar tidak hilang
+                    valid_entries.append(entry)
+            else:
+                # Jika tidak ada tanggal, anggap valid
+                valid_entries.append(entry)
+                
+        return valid_entries
 
     def fetch_feed(self, url):
         """Mengambil dan memparsing data RSS dengan requests + headers."""
@@ -113,14 +138,12 @@ class RSSService:
         """Membersihkan dan memformat data entry."""
         image_url = self.extract_image(entry)
         
-        # Bersihkan summary dari HTML tags untuk caption yang rapi (opsional)
-        # Di sini kita biarkan raw atau simple cleanup
         raw_summary = entry.get('summary', '') or entry.get('description', '')
         soup = BeautifulSoup(raw_summary, 'html.parser')
         clean_summary = soup.get_text()[:300] + "..." if len(soup.get_text()) > 300 else soup.get_text()
 
         return {
-            'id': entry.get('id', entry.get('link')), # Fallback ID ke link jika ID tidak ada
+            'id': entry.get('id', entry.get('link')),
             'title': entry.get('title', 'No Title'),
             'link': entry.get('link', ''),
             'published': entry.get('published', ''),

@@ -1,8 +1,8 @@
 import asyncio
-import time
+
 import signal
 import sys
-from config.config import RSS_URLS, DELAY_BETWEEN_POSTS, CHECK_INTERVAL
+from config.config import RSS_URLS, DELAY_BETWEEN_POSTS, CHECK_INTERVAL, MAX_NEWS_AGE_HOURS
 from src.rss_service import RSSService
 from src.bot_service import BotService
 
@@ -33,18 +33,15 @@ async def main():
             for url in RSS_URLS:
                 if not running: break
                 
-                # 1. Fetch Feed
-                # print(f"Checking: {url}") # Optional log
+                # Fetch feed
                 entries = rss_service.fetch_feed(url)
                 
-                # 2. Filter New Entries
-                pass # logic below...
+                # Filter by age
+                entries = rss_service.filter_entries_by_age(entries, MAX_NEWS_AGE_HOURS)
 
-                # Kita balik urutannya agar memproses dari yang paling bawah (terlama) di list feed 
-                # ke yang paling atas (terbaru), sehingga urutan posting di Telegram logis kronologis.
+                # Process entries from oldest to newest
                 new_entries = []
                 for entry in reversed(entries):
-                    # Gunakan ID atau Link sebagai identifier unik
                     identifier = entry.get('id', entry.get('link'))
                     if rss_service.is_new(identifier):
                         new_entries.append(entry)
@@ -58,28 +55,23 @@ async def main():
                         parsed_data = rss_service.parse_entry(entry)
                         identifier = parsed_data['id']
                         
-                        # 3. Send to Telegram
+                        # Send to Telegram
                         success = await bot_service.send_post(parsed_data)
                         
                         if success:
-                            # 4. Mark as Read
                             rss_service.mark_as_read(identifier)
-                            # 5. Delay per message (Spec #6)
                             await asyncio.sleep(DELAY_BETWEEN_POSTS)
                         else:
                             print(f"Failed to send: {identifier}")
                 else:
                     pass
-                    # print(f"[{url}] No new articles.")
             
         except Exception as e:
             print(f"An error occurred in main loop: {e}")
             await asyncio.sleep(5)
 
-        # 6. Wait for next check cycle
+        # Wait for next check cycle
         if running:
-            # print(f"Sleeping for {CHECK_INTERVAL} seconds...") # Optional verbose logging
-            # Kita gunakan loop kecil untuk sleep agar responsif terhadap signal stop
             for _ in range(CHECK_INTERVAL):
                 if not running: break
                 await asyncio.sleep(1)

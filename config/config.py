@@ -3,32 +3,29 @@ import sys
 from dotenv import load_dotenv
 
 # ==========================================
-# USER CONFIGURATION (EDIT BAGIAN INI)
+# User Configuration
 # ==========================================
 
-# Daftar URL Feed RSS Berita
-# Masukkan dalam format list (kurung siku) dipisahkan koma
+# RSS Feed URLs
 RSS_URLS = [
-    # Menggunakan Google News Proxy untuk Cryptoslate karena proteksi anti-bot
-    'https://www.theblock.co/rss.xml',
-    'https://decrypt.co/feed',
+    'https://pintu.co.id/news/categories/crypto-dan-blockchain/rss-feed.xml',
+    'https://cryptoharian.com/feed/',
 ]
 
-# Jeda waktu antar pesan (detik)
-# Agar tidak terkena flood limit Telegram
-DELAY_BETWEEN_POSTS = 5
+# Delay between posts (seconds)
+DELAY_BETWEEN_POSTS = 2
 
-# Interval pengecekan feed RSS (detik)
-# Contoh: 300 berarti setiap 5 menit bot akan mengecek berita baru
-CHECK_INTERVAL = 300
+# Check interval (seconds)
+CHECK_INTERVAL = 3600
 
-# Instant View RHASH (Opsional)
-# Dapatkan dari https://instantview.telegram.org/
-# Kosongkan jika tidak punya tempalte khusus (Bot akan coba native preview atau hidden link)
+# Instant View RHASH (Optional)
 IV_RHASH = ''
 
+# Max age of news to process (hours)
+MAX_NEWS_AGE_HOURS = 12
+
 # ==========================================
-# SYSTEM CONFIGURATION (JANGAN DIEDIT)
+# System Configuration
 # ==========================================
 
 # Load environment variables from .env file
@@ -41,8 +38,7 @@ def get_env_variable(name, default=None, required=False):
         sys.exit(1)
     return value
 
-# Bot Credentials (dari .env)
-# Pastikan file .env sudah diisi dengan token dan ID grup yang benar
+# Bot Credentials
 BOT_TOKEN = get_env_variable("BOT_TOKEN", required=True)
 GROUP_ID = get_env_variable("GROUP_ID", required=True)
 TOPIC_ID = get_env_variable("TOPIC_ID") # Optional
