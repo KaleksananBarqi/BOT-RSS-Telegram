@@ -1,0 +1,118 @@
+import unittest
+import os
+import shutil
+import sqlite3
+import sys
+import json
+from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock, patch
+
+# Add src to path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from src.rss_service import RSSService
+
+class TestRSSService(unittest.TestCase):
+    def setUp(self):
+        # Use a temporary DB file for testing
+        self.test_db = 'tests/test_bot.db'
+        self.test_json = 'tests/test_history.json'
+
+        # Ensure clean state
+        if os.path.exists(self.test_db):
+            os.remove(self.test_db)
+        if os.path.exists(self.test_json):
+            os.remove(self.test_json)
+
+        self.rss_service = RSSService(db_file=self.test_db, json_history_file=self.test_json)
+
+    def tearDown(self):
+        # Cleanup
+        if os.path.exists(self.test_db):
+            os.remove(self.test_db)
+        if os.path.exists(self.test_json):
+            os.remove(self.test_json)
+
+    def test_init_db(self):
+        """Test if DB is created."""
+        self.assertTrue(os.path.exists(self.test_db))
+        conn = sqlite3.connect(self.test_db)
+        c = conn.cursor()
+        c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='history'")
+        self.assertIsNotNone(c.fetchone())
+        conn.close()
+
+    def test_is_new_and_mark_as_read(self):
+        entry_id = "test_entry_1"
+
+        # Should be new initially
+        self.assertTrue(self.rss_service.is_new(entry_id))
+
+        # Mark as read
+        self.rss_service.mark_as_read(entry_id)
+
+        # Should not be new anymore
+        self.assertFalse(self.rss_service.is_new(entry_id))
+
+    def test_extract_image(self):
+        # Helper class to simulate feedparser entry
+        class Entry(dict):
+            def __getattr__(self, name):
+                if name in self: return self[name]
+                return None
+
+        # Case 1: Media Content
+        e1 = Entry({
+            'media_content': [{'url': 'http://example.com/img.jpg', 'type': 'image/jpeg'}]
+        })
+        self.assertEqual(self.rss_service.extract_image(e1), 'http://example.com/img.jpg')
+
+        # Case 2: Summary Image
+        e2 = Entry({'summary': '<p>Text <img src="http://example.com/summary.jpg"> end</p>'})
+        self.assertEqual(self.rss_service.extract_image(e2), 'http://example.com/summary.jpg')
+
+        # Case 3: No image
+        e3 = Entry({'summary': 'No image here'})
+        self.assertIsNone(self.rss_service.extract_image(e3))
+
+    def test_filter_entries_by_age(self):
+        now = datetime.now(timezone.utc)
+
+        # Helper class
+        class Entry:
+            def __init__(self, time_tuple):
+                self.published_parsed = time_tuple
+
+        # Entry 1: New (1 hour ago)
+        e1_time = now - timedelta(hours=1)
+        e1 = Entry(e1_time.timetuple())
+
+        # Entry 2: Old (25 hours ago)
+        e2_time = now - timedelta(hours=25)
+        e2 = Entry(e2_time.timetuple())
+
+        entries = [e1, e2]
+        filtered = self.rss_service.filter_entries_by_age(entries, max_hours=24)
+
+        self.assertIn(e1, filtered)
+        self.assertNotIn(e2, filtered)
+
+    def test_migration(self):
+        # Create a dummy json file
+        data = ["old_id_1", "old_id_2"]
+        with open(self.test_json, 'w') as f:
+            json.dump(data, f)
+
+        # Re-init service to trigger migration
+        # We need to make sure DB is empty/deleted first
+        if os.path.exists(self.test_db):
+            os.remove(self.test_db)
+
+        service = RSSService(db_file=self.test_db, json_history_file=self.test_json)
+
+        self.assertFalse(service.is_new("old_id_1"))
+        self.assertFalse(service.is_new("old_id_2"))
+        self.assertTrue(service.is_new("new_id"))
+
+if __name__ == '__main__':
+    unittest.main()
