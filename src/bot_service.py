@@ -1,8 +1,10 @@
 import telegram
 from telegram.request import HTTPXRequest
 import asyncio
+import logging
 from config.config import BOT_TOKEN, GROUP_ID, TOPIC_ID, IV_RHASH
 
+logger = logging.getLogger(__name__)
 
 class BotService:
     def __init__(self):
@@ -39,7 +41,7 @@ class BotService:
         # Kita gunakan send_message agar Link Preview (IV) muncul dari link pertama di text.
         
         try:
-            print(f"Sending: {title}")
+            logger.info(f"Sending: {title}")
             await self.bot.send_message(
                 chat_id=self.group_id,
                 message_thread_id=self.topic_id,
@@ -49,5 +51,5 @@ class BotService:
             )
             return True
         except Exception as e:
-            print(f"Failed to send message: {e}")
+            logger.error(f"Failed to send message: {e}")
             return False

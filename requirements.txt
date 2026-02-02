@@ -2,3 +2,4 @@ python-telegram-bot
 feedparser
 python-dotenv
 beautifulsoup4
+aiohttp

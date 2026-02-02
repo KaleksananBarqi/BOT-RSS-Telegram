@@ -2,6 +2,10 @@ import feedparser
 import json
 import os
 import ssl
+import aiohttp
+import asyncio
+import logging
+import sqlite3
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta, timezone
 
@@ -10,39 +14,86 @@ from datetime import datetime, timedelta, timezone
 if hasattr(ssl, '_create_unverified_context'):
     ssl._create_default_https_context = ssl._create_unverified_context
 
+logger = logging.getLogger(__name__)
+
 class RSSService:
-    def __init__(self, history_file='data/history.json'):
-        self.history_file = history_file
-        self.history = self._load_history()
+    def __init__(self, db_file='data/bot.db', json_history_file='data/history.json'):
+        self.db_file = db_file
+        self.json_history_file = json_history_file
+        self.session = None
+        self._init_db()
+        self._migrate_json_to_db()
 
-    def _load_history(self):
-        """Memuat riwayat ID berita yang sudah dikirim."""
-        if not os.path.exists(self.history_file):
-            return []
+    def _init_db(self):
+        """Inisialisasi database SQLite."""
         try:
-            with open(self.history_file, 'r') as f:
-                return json.load(f)
-        except (json.JSONDecodeError, IOError):
-            return []
+            os.makedirs(os.path.dirname(self.db_file), exist_ok=True)
+            conn = sqlite3.connect(self.db_file)
+            c = conn.cursor()
+            c.execute('''CREATE TABLE IF NOT EXISTS history
+                         (id TEXT PRIMARY KEY, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+            # Optional: Index on created_at if we want to prune later
+            c.execute('''CREATE INDEX IF NOT EXISTS idx_created_at ON history(created_at)''')
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.error(f"Failed to initialize database: {e}")
 
-    def _save_history(self):
-        """Menyimpan riwayat ke file."""
-        # Simpan hanya 1000 entri terakhir agar file tidak terlalu besar
-        self.history = self.history[-1000:]
-        # Ensure directory exists
-        os.makedirs(os.path.dirname(self.history_file), exist_ok=True)
-        with open(self.history_file, 'w') as f:
-            json.dump(self.history, f, indent=4)
+    def _migrate_json_to_db(self):
+        """Migrasi data dari JSON lama ke SQLite jika ada."""
+        if os.path.exists(self.json_history_file):
+            conn = sqlite3.connect(self.db_file)
+            c = conn.cursor()
+
+            # Cek apakah DB masih kosong (hanya migrasi jika kosong/baru)
+            try:
+                c.execute("SELECT count(*) FROM history")
+                count = c.fetchone()[0]
+
+                if count == 0:
+                    logger.info("Migrating history from JSON to SQLite...")
+                    try:
+                        with open(self.json_history_file, 'r') as f:
+                            history = json.load(f)
+                            if isinstance(history, list):
+                                for item in history:
+                                    c.execute("INSERT OR IGNORE INTO history (id) VALUES (?)", (str(item),))
+                                conn.commit()
+                                logger.info(f"Migration complete. Imported {len(history)} items.")
+                            else:
+                                logger.warning("JSON history format invalid, skipping migration.")
+                    except (json.JSONDecodeError, IOError) as e:
+                        logger.error(f"Failed to read JSON history for migration: {e}")
+            except Exception as e:
+                logger.error(f"Migration check failed: {e}")
+            finally:
+                conn.close()
 
     def is_new(self, entry_id):
         """Mengecek apakah berita ini baru."""
-        return entry_id not in self.history
+        is_new = True
+        try:
+            conn = sqlite3.connect(self.db_file)
+            c = conn.cursor()
+            c.execute("SELECT 1 FROM history WHERE id = ?", (entry_id,))
+            if c.fetchone():
+                is_new = False
+            conn.close()
+        except Exception as e:
+            logger.error(f"Database error in is_new: {e}")
+            return False
+        return is_new
 
     def mark_as_read(self, entry_id):
         """Menandai berita sebagai sudah dibaca/dikirim."""
-        if entry_id not in self.history:
-            self.history.append(entry_id)
-            self._save_history()
+        try:
+            conn = sqlite3.connect(self.db_file)
+            c = conn.cursor()
+            c.execute("INSERT OR IGNORE INTO history (id) VALUES (?)", (entry_id,))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.error(f"Failed to save history: {e}")
 
     def extract_image(self, entry):
         """Mencoba mengekstrak gambar dari entry RSS."""
@@ -97,9 +148,18 @@ class RSSService:
                 
         return valid_entries
 
-    def fetch_feed(self, url):
-        """Mengambil dan memparsing data RSS dengan requests + headers."""
-        print(f"Fetching feed from: {url}")
+    async def _get_session(self):
+        if self.session is None or self.session.closed:
+            self.session = aiohttp.ClientSession()
+        return self.session
+
+    async def close(self):
+        if self.session:
+            await self.session.close()
+
+    async def fetch_feed(self, url):
+        """Mengambil dan memparsing data RSS dengan aiohttp + headers."""
+        logger.info(f"Fetching feed from: {url}")
         
         # Headers untuk meniru browser asli
         headers = {
@@ -110,29 +170,34 @@ class RSSService:
             'Accept-Encoding': 'gzip, deflate'
         }
 
+        feed = None
         try:
-            # Gunakan requests untuk mengambil konten raw
-            import requests # Lazy import to avoid top-level dependency if not used elsewhere often
-            response = requests.get(url, headers=headers, timeout=15)
-            
-            if response.status_code == 200:
-                feed = feedparser.parse(response.content)
-            elif response.status_code in [403, 429]:
-                print(f"Warning: Access denied (HTTP {response.status_code}). Site might be blocking bots.")
-                return []
-            else:
-                print(f"Warning: Failed to fetch feed (HTTP {response.status_code})")
-                return []
+            session = await self._get_session()
+            async with session.get(url, headers=headers, timeout=15) as response:
+                if response.status == 200:
+                    content = await response.read()
+                    feed = feedparser.parse(content)
+                elif response.status in [403, 429]:
+                    logger.warning(f"Warning: Access denied (HTTP {response.status}). Site might be blocking bots.")
+                    return []
+                else:
+                    logger.warning(f"Warning: Failed to fetch feed (HTTP {response.status})")
+                    return []
 
         except Exception as e:
-            print(f"Error fetching feed via requests: {e}")
-            # Fallback ke feedparser standard jika requests gagal total
-            feed = feedparser.parse(url)
+            logger.error(f"Error fetching feed via aiohttp: {e}")
+            # Fallback ke feedparser standard jika gagal total (blocking, run in executor)
+            try:
+                loop = asyncio.get_event_loop()
+                feed = await loop.run_in_executor(None, feedparser.parse, url)
+            except Exception as e2:
+                logger.error(f"Fallback failed: {e2}")
+                return []
 
-        if feed.bozo:
-             print(f"Warning: Error parsing feed: {feed.bozo_exception}")
+        if feed and feed.bozo:
+             logger.warning(f"Warning: Error parsing feed: {feed.bozo_exception}")
 
-        return feed.entries
+        return feed.entries if feed else []
 
     def parse_entry(self, entry):
         """Membersihkan dan memformat data entry."""
