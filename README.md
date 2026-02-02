@@ -1,44 +1,62 @@
-# Telegram RSS News Bot
+# 📰 Telegram RSS News Bot
 
-Bot Telegram canggih berbasis Python yang secara otomatis mengambil berita dari berbagai feed RSS, memfilternya secara cerdas, dan mengirimkannya ke Grup atau Topik Telegram dengan format yang kaya.
+**Bot Telegram Canggih untuk Agregasi Berita Otomatis**
 
-## Fitur Utama
+Bot berbasis Python yang kuat, cepat, dan efisien untuk memantau feed RSS, memfilter berita terbaru, dan mengirimkannya ke komunitas Telegram Anda dengan format yang rapi dan menarik.
 
-- **Multi-Source RSS Support**: Memantau dan mengambil berita dari banyak URL RSS sekaligus.
-- **Absolute Hourly Scheduling**: Bot beroperasi pada jadwal jam yang presisi (misalnya tepat pukul 14:00, 15:00) sesuai interval yang dikonfigurasi, memastikan keteraturan pengiriman.
-- **Smart Age Filtering**: Secara otomatis menyaring berita yang terlalu lama (berdasarkan `MAX_NEWS_AGE_HOURS`) untuk mencegah spam berita lawas saat bot baru dinyalakan atau direstart.
-- **Duplicate Prevention**: Menyimpan riwayat berita yang telah dikirim di `data/history.json` untuk memastikan tidak ada berita ganda.
-- **Rich Media & Formatting**: Mengirim pesan dengan judul tebal, ringkasan, dan gambar, serta tautan *Read More*.
-- **Instant View Support**: Mendukung fitur Instant View Telegram (melalui template `IV_RHASH`) untuk pengalaman membaca cepat.
-- **Topic-Aware**: Dapat dikonfigurasi untuk mengirim berita ke topik spesifik dalam grup (supergroup) atau ke chat utama.
-- **Resilient Fetching**: Dilengkapi dengan header HTTP menyerupai browser dan penanganan SSL kustom untuk menghindari pemblokiran oleh penyedia feed (seperti Cloudflare).
+---
 
-## Struktur Proyek
+## ✨ Fitur Unggulan
+
+Bot ini telah diperbarui dengan teknologi terbaru untuk memastikan kinerja maksimal:
+
+*   🚀 **High-Performance Async I/O**: Dibangun menggunakan `aiohttp` untuk melakukan *fetching* data dari banyak sumber RSS secara asinkron (paralel), membuat bot sangat responsif dan cepat.
+*   💾 **Robust SQLite Persistence**: Menggunakan database **SQLite** (`data/bot.db`) untuk menyimpan riwayat berita. Ini memastikan data tetap aman, mencegah duplikasi berita, dan mampu menangani ribuan *entry* tanpa masalah performa.
+*   🐳 **Docker Ready**: Siap dijalankan di mana saja dengan dukungan penuh **Docker** dan **Docker Compose**. Deployment menjadi semudah satu perintah CLI.
+*   ⏰ **Absolute Hourly Scheduling**: Sistem penjadwalan presisi yang memastikan bot berjalan pada jam-jam yang tepat (misal: 14:00, 15:00) sesuai interval yang Anda tentukan.
+*   🧹 **Smart Age Filtering**: Secara cerdas menyaring berita yang sudah "basi" (berdasarkan konfigurasi `MAX_NEWS_AGE_HOURS`) saat bot pertama kali dinyalakan.
+*   🖼️ **Rich Media Support**: Mengirimkan berita lengkap dengan **Judul Tebal**, Ringkasan, dan **Gambar** (jika tersedia).
+*   ⚡ **Instant View & Topic Aware**: Mendukung fitur Instant View Telegram dan pengiriman pesan ke **Topik** spesifik dalam Supergroup.
+*   🛡️ **Anti-Blocking**: Header HTTP kustom untuk meniru perilaku browser asli, meminimalkan risiko blokir dari penyedia feed.
+
+---
+
+## 📂 Struktur Proyek
 
 ```bash
 BOT RSS TELEGRAM/
 ├── config/
 │   └── config.py        # Pusat konfigurasi (URL RSS, Interval, Token)
 ├── data/
-│   └── history.json     # Penyimpanan lokal riwayat berita yang terkirim
+│   ├── bot.db           # Database SQLite (Menyimpan riwayat berita terkirim)
+│   └── history.json     # (Legacy) File migrasi riwayat lama
 ├── src/
-│   ├── bot_service.py   # Layanan interaksi dengan API Telegram
-│   ├── rss_service.py   # Layanan fetching, parsing, dan filtering RSS
-│   └── main.py          # Logika utama, loop penjadwalan, dan orkestrasi
-├── .env                 # File environment untuk kredensial rahasia
-├── run.py               # Script entry point untuk menjalankan bot
-└── requirements.txt     # Daftar pustaka Python yang dibutuhkan
+│   ├── main.py          # Logika utama orkestrasi bot
+│   ├── rss_service.py   # Service untuk fetching, parsing, dan filtering RSS
+│   └── bot_service.py   # Service untuk interaksi dengan API Telegram
+├── Dockerfile           # Konfigurasi image Docker
+├── docker-compose.yml   # Konfigurasi orkestrasi container
+├── .env                 # (Anda buat sendiri) File kredensial rahasia
+└── requirements.txt     # Daftar dependensi Python
 ```
 
-## Prasyarat
+---
+
+## 🛠️ Prasyarat
 
 Sebelum memulai, pastikan Anda memiliki:
 
-1.  **Python 3.8** atau lebih baru.
-2.  **Akun Telegram** dan **Bot Token** (dapatkan dari [@BotFather](https://t.me/BotFather)).
-3.  **ID Grup** tempat bot akan mengirim berita (dan **Topic ID** jika dikirim ke topik tertentu).
+1.  **Bot Token**: Chat dengan [@BotFather](https://t.me/BotFather) untuk membuat bot baru.
+2.  **Group/Channel ID**: ID tempat bot akan mengirim pesan.
+3.  **Python 3.8+** (untuk instalasi manual) ATAU **Docker** (untuk instalasi container).
 
-## Instalasi
+---
+
+## 🚀 Panduan Instalasi & Penggunaan
+
+### Opsi 1: Menggunakan Docker (Sangat Disarankan) 🐳
+
+Cara termudah dan terbersih untuk menjalankan bot.
 
 1.  **Clone Repository**
     ```bash
@@ -46,13 +64,39 @@ Sebelum memulai, pastikan Anda memiliki:
     cd "BOT RSS TELEGRAM"
     ```
 
-2.  **Setting Virtual Environment** (Disarankan)
+2.  **Konfigurasi Environment**
+    Buat file `.env` dari contoh di bawah ini:
+    ```bash
+    # Buat file .env
+    echo "BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11" >> .env
+    echo "GROUP_ID=-1001234567890" >> .env
+    echo "TOPIC_ID=" >> .env # Kosongkan jika tidak menggunakan topik
+    ```
+
+3.  **Jalankan Bot**
+    ```bash
+    docker-compose up -d
+    ```
+    Bot akan berjalan di background dan otomatis restart jika server reboot.
+
+4.  **Lihat Logs**
+    ```bash
+    docker-compose logs -f
+    ```
+
+### Opsi 2: Instalasi Manual (Python) 🐍
+
+1.  **Clone Repository**
+    ```bash
+    git clone <repository-url>
+    cd "BOT RSS TELEGRAM"
+    ```
+
+2.  **Buat Virtual Environment**
     ```bash
     python -m venv venv
-    # Windows
-    venv\Scripts\activate
-    # Linux/Mac
-    source venv/bin/activate
+    source venv/bin/activate  # Linux/Mac
+    # venv\Scripts\activate   # Windows
     ```
 
 3.  **Install Dependencies**
@@ -61,33 +105,41 @@ Sebelum memulai, pastikan Anda memiliki:
     ```
 
 4.  **Konfigurasi Environment**
-    Buat file `.env` di direktori root dan isi dengan kredensial Anda:
+    Buat file `.env` di root folder:
     ```ini
-    BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz
-    GROUP_ID=-1001234567890
-    TOPIC_ID=123  # Opsional, hapus atau biarkan kosong jika tidak pakai topik
+    BOT_TOKEN=token_bot_anda
+    GROUP_ID=-100xxxxxxxx
+    TOPIC_ID=  # Isi angka ID topik jika perlu, atau biarkan kosong
     ```
 
-## Konfigurasi
+5.  **Jalankan Bot**
+    ```bash
+    python run.py
+    ```
 
-Semua pengaturan perilaku bot dapat diubah di `config/config.py`:
+---
 
-- **RSS_URLS**: Daftar link feed RSS yang ingin dipantau.
-- **CHECK_INTERVAL_HOURS**: Interval pengecekan dalam jam (misal: `1` untuk setiap jam).
-- **DELAY_BETWEEN_POSTS**: Jeda waktu (detik) antar pengiriman pesan untuk menghindari rate limit.
-- **MAX_NEWS_AGE_HOURS**: Batas usia berita dalam jam. Berita yang lebih tua dari ini akan diabaikan.
-- **IV_RHASH**: Hash untuk template Instant View (jika Anda memilikinya).
+## ⚙️ Konfigurasi Lanjutan
 
-## Menjalankan Bot
+Anda dapat mengubah perilaku bot melalui file `config/config.py`:
 
-Jalankan bot menggunakan perintah:
+| Variabel | Deskripsi | Default |
+| :--- | :--- | :--- |
+| `RSS_URLS` | Daftar URL feed RSS yang akan dipantau. | `[...]` |
+| `CHECK_INTERVAL_HOURS` | Seberapa sering bot mengecek berita (dalam jam). | `1` |
+| `DELAY_BETWEEN_POSTS` | Jeda waktu (detik) antar pesan agar tidak terkena rate limit. | `5` |
+| `MAX_NEWS_AGE_HOURS` | Batas umur berita. Berita lebih tua dari ini akan diabaikan. | `24` |
+| `IV_RHASH` | Hash template Instant View (opsional). | `None` |
 
-```bash
-python run.py
-```
+---
 
-Bot akan mulai memantau feed, mengirimkan berita baru, dan kemudian tidur (sleep) hingga jadwal jam berikutnya tiba. Tekan `Ctrl+C` untuk menghentikan bot.
+## 🤝 Kontribusi
 
-## Kontribusi
+Ingin menambahkan fitur baru?
+1.  Fork repository ini.
+2.  Buat branch fitur Anda (`git checkout -b fitur-keren`).
+3.  Commit perubahan Anda (`git commit -m 'Menambahkan fitur keren'`).
+4.  Push ke branch (`git push origin fitur-keren`).
+5.  Buat Pull Request.
 
-Kontribusi dipersilakan! Silakan buat *issue* atau *pull request* jika Anda menemukan bug atau ingin menambahkan fitur baru.
+Happy Coding! 🚀
