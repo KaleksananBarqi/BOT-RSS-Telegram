@@ -52,11 +52,7 @@ async def main():
                     entries = rss_service.filter_entries_by_age(entries, MAX_NEWS_AGE_HOURS)
 
                     # Process entries from oldest to newest
-                    new_entries = []
-                    for entry in reversed(entries):
-                        identifier = entry.get('id', entry.get('link'))
-                        if rss_service.is_new(identifier):
-                            new_entries.append(entry)
+                    new_entries = rss_service.get_new_entries(reversed(entries))
 
                     if new_entries:
                         logger.info(f"[{url}] Found {len(new_entries)} new articles.")
