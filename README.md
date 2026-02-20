@@ -26,7 +26,8 @@ Bot ini telah diperbarui dengan teknologi terbaru untuk memastikan kinerja maksi
 ```bash
 BOT RSS TELEGRAM/
 ├── config/
-│   └── config.py        # Pusat konfigurasi (URL RSS, Interval, Token)
+│   ├── config.py        # Pusat konfigurasi (Interval, Token)
+│   └── rss_feeds.json   # Daftar URL Feed RSS (JSON)
 ├── data/
 │   ├── bot.db           # Database SQLite (Menyimpan riwayat berita terkirim)
 │   └── history.json     # (Legacy) File migrasi riwayat lama
@@ -36,6 +37,7 @@ BOT RSS TELEGRAM/
 │   └── bot_service.py   # Service untuk interaksi dengan API Telegram
 ├── Dockerfile           # Konfigurasi image Docker
 ├── docker-compose.yml   # Konfigurasi orkestrasi container
+├── .env.example         # Template file konfigurasi environment
 ├── .env                 # (Anda buat sendiri) File kredensial rahasia
 └── requirements.txt     # Daftar dependensi Python
 ```
@@ -65,12 +67,20 @@ Cara termudah dan terbersih untuk menjalankan bot.
     ```
 
 2.  **Konfigurasi Environment**
-    Buat file `.env` dari contoh di bawah ini:
+    Salin file contoh `.env.example` ke `.env` dan sesuaikan isinya:
     ```bash
-    # Buat file .env
-    echo "BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11" >> .env
-    echo "GROUP_ID=-1001234567890" >> .env
-    echo "TOPIC_ID=" >> .env # Kosongkan jika tidak menggunakan topik
+    cp .env.example .env
+    nano .env # atau editor teks favorit Anda
+    ```
+    Pastikan untuk mengisi `BOT_TOKEN` dan `GROUP_ID`.
+
+    **Konfigurasi Feed RSS**:
+    Edit file `config/rss_feeds.json` untuk menambah atau menghapus URL RSS yang ingin dipantau.
+    ```json
+    [
+      "https://cryptoharian.com/feed/",
+      "https://example.com/rss"
+    ]
     ```
 
 3.  **Jalankan Bot**
@@ -105,11 +115,10 @@ Cara termudah dan terbersih untuk menjalankan bot.
     ```
 
 4.  **Konfigurasi Environment**
-    Buat file `.env` di root folder:
-    ```ini
-    BOT_TOKEN=token_bot_anda
-    GROUP_ID=-100xxxxxxxx
-    TOPIC_ID=  # Isi angka ID topik jika perlu, atau biarkan kosong
+    Buat file `.env` di root folder (gunakan `.env.example` sebagai referensi):
+    ```bash
+    cp .env.example .env
+    # Edit .env dengan kredensial Anda
     ```
 
 5.  **Jalankan Bot**
@@ -125,7 +134,7 @@ Anda dapat mengubah perilaku bot melalui file `config/config.py`:
 
 | Variabel | Deskripsi | Default |
 | :--- | :--- | :--- |
-| `RSS_URLS` | Daftar URL feed RSS yang akan dipantau. | `[...]` |
+| `RSS_URLS` | Diatur melalui file `config/rss_feeds.json`. | `[...]` |
 | `CHECK_INTERVAL_HOURS` | Seberapa sering bot mengecek berita (dalam jam). | `1` |
 | `DELAY_BETWEEN_POSTS` | Jeda waktu (detik) antar pesan agar tidak terkena rate limit. | `5` |
 | `MAX_NEWS_AGE_HOURS` | Batas umur berita. Berita lebih tua dari ini akan diabaikan. | `24` |

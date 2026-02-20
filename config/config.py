@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 from dotenv import load_dotenv
 
 # ==========================================
@@ -7,14 +8,27 @@ from dotenv import load_dotenv
 # ==========================================
 
 # RSS Feed URLs
-RSS_URLS = [
-    'https://cryptoharian.com/feed/',
-    'https://www.crisisgroup.org/rss',
-    'https://decrypt.co/feed',
-    'https://id.beincrypto.com/feed/',
-    'https://www.investing.com/rss/news_287.rss',
-    'https://www.cnbc.com/id/10000664/device/rss/rss.html'
-]
+def load_rss_urls():
+    json_path = os.path.join(os.path.dirname(__file__), 'rss_feeds.json')
+    if not os.path.exists(json_path):
+        print(f"Warning: RSS configuration file not found at {json_path}")
+        return []
+    try:
+        with open(json_path, 'r') as f:
+            urls = json.load(f)
+            if isinstance(urls, list):
+                return urls
+            else:
+                print(f"Error: Invalid format in {json_path}. Expected a list of URLs.")
+                return []
+    except json.JSONDecodeError as e:
+        print(f"Error: Failed to parse {json_path}: {e}")
+        return []
+    except Exception as e:
+        print(f"Error loading RSS URLs: {e}")
+        return []
+
+RSS_URLS = load_rss_urls()
 
 # Delay between posts (seconds)
 DELAY_BETWEEN_POSTS = 2
