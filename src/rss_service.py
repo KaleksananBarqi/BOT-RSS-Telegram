@@ -21,29 +21,29 @@ class RSSService:
         self.db_file = db_file
         self.json_history_file = json_history_file
         self.session = None
+        os.makedirs(os.path.dirname(self.db_file), exist_ok=True)
+        self.conn = sqlite3.connect(self.db_file, check_same_thread=False)
+        self.conn.execute("PRAGMA journal_mode=WAL;")
+        self.conn.execute("PRAGMA synchronous=NORMAL;")
         self._init_db()
         self._migrate_json_to_db()
 
     def _init_db(self):
         """Inisialisasi database SQLite."""
         try:
-            os.makedirs(os.path.dirname(self.db_file), exist_ok=True)
-            conn = sqlite3.connect(self.db_file)
-            c = conn.cursor()
+            c = self.conn.cursor()
             c.execute('''CREATE TABLE IF NOT EXISTS history
                          (id TEXT PRIMARY KEY, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
             # Optional: Index on created_at if we want to prune later
             c.execute('''CREATE INDEX IF NOT EXISTS idx_created_at ON history(created_at)''')
-            conn.commit()
-            conn.close()
+            self.conn.commit()
         except Exception as e:
             logger.error(f"Failed to initialize database: {e}")
 
     def _migrate_json_to_db(self):
         """Migrasi data dari JSON lama ke SQLite jika ada."""
         if os.path.exists(self.json_history_file):
-            conn = sqlite3.connect(self.db_file)
-            c = conn.cursor()
+            c = self.conn.cursor()
 
             # Cek apakah DB masih kosong (hanya migrasi jika kosong/baru)
             try:
@@ -58,7 +58,7 @@ class RSSService:
                             if isinstance(history, list):
                                 for item in history:
                                     c.execute("INSERT OR IGNORE INTO history (id) VALUES (?)", (str(item),))
-                                conn.commit()
+                                self.conn.commit()
                                 logger.info(f"Migration complete. Imported {len(history)} items.")
                             else:
                                 logger.warning("JSON history format invalid, skipping migration.")
@@ -66,32 +66,23 @@ class RSSService:
                         logger.error(f"Failed to read JSON history for migration: {e}")
             except Exception as e:
                 logger.error(f"Migration check failed: {e}")
-            finally:
-                conn.close()
 
     def is_new(self, entry_id):
         """Mengecek apakah berita ini baru."""
-        is_new = True
         try:
-            conn = sqlite3.connect(self.db_file)
-            c = conn.cursor()
+            c = self.conn.cursor()
             c.execute("SELECT 1 FROM history WHERE id = ?", (entry_id,))
-            if c.fetchone():
-                is_new = False
-            conn.close()
+            return c.fetchone() is None
         except Exception as e:
             logger.error(f"Database error in is_new: {e}")
             return False
-        return is_new
 
     def mark_as_read(self, entry_id):
         """Menandai berita sebagai sudah dibaca/dikirim."""
         try:
-            conn = sqlite3.connect(self.db_file)
-            c = conn.cursor()
+            c = self.conn.cursor()
             c.execute("INSERT OR IGNORE INTO history (id) VALUES (?)", (entry_id,))
-            conn.commit()
-            conn.close()
+            self.conn.commit()
         except Exception as e:
             logger.error(f"Failed to save history: {e}")
 
@@ -156,6 +147,8 @@ class RSSService:
     async def close(self):
         if self.session:
             await self.session.close()
+        if hasattr(self, 'conn') and self.conn:
+            self.conn.close()
 
     async def fetch_feed(self, url):
         """Mengambil dan memparsing data RSS dengan aiohttp + headers."""
