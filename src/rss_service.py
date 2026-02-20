@@ -11,9 +11,6 @@ from datetime import datetime, timedelta, timezone
 from config.config import USER_AGENT
 
 
-# Workaround for SSL issues on some systems
-if hasattr(ssl, '_create_unverified_context'):
-    ssl._create_default_https_context = ssl._create_unverified_context
 
 logger = logging.getLogger(__name__)
 
@@ -215,7 +212,7 @@ class RSSService:
         feed = None
         try:
             session = await self._get_session()
-            async with session.get(url, headers=headers, timeout=15) as response:
+            async with session.get(url, headers=headers, timeout=15, ssl=False) as response:
                 if response.status == 200:
                     content = await response.read()
                     loop = asyncio.get_event_loop()
@@ -231,8 +228,16 @@ class RSSService:
             logger.error(f"Error fetching feed via aiohttp: {e}")
             # Fallback ke feedparser standard jika gagal total (blocking, run in executor)
             try:
+                def _fetch_fallback(u):
+                    import urllib.request
+                    # Create unverified context to ignore SSL errors
+                    context = ssl._create_unverified_context() if hasattr(ssl, '_create_unverified_context') else None
+                    req = urllib.request.Request(u, headers={'User-Agent': USER_AGENT})
+                    with urllib.request.urlopen(req, context=context, timeout=15) as f:
+                        return feedparser.parse(f.read())
+
                 loop = asyncio.get_event_loop()
-                feed = await loop.run_in_executor(None, feedparser.parse, url)
+                feed = await loop.run_in_executor(None, _fetch_fallback, url)
             except Exception as e2:
                 logger.error(f"Fallback failed: {e2}")
                 return []
