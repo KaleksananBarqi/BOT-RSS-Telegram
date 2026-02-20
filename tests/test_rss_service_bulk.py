@@ -8,6 +8,10 @@ sys.modules['feedparser'] = MagicMock()
 sys.modules['aiohttp'] = MagicMock()
 sys.modules['bs4'] = MagicMock()
 
+# Set dummy environment variables to bypass config check
+os.environ['BOT_TOKEN'] = 'dummy_token'
+os.environ['GROUP_ID'] = 'dummy_group_id'
+
 # Add src to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -21,8 +25,25 @@ class TestRSSServiceBulk(unittest.TestCase):
         self.rss_service = RSSService(db_file=self.test_db)
 
     def tearDown(self):
+        if hasattr(self, 'rss_service') and self.rss_service.conn:
+            self.rss_service.conn.close()
+
         if os.path.exists(self.test_db):
-            os.remove(self.test_db)
+            try:
+                os.remove(self.test_db)
+            except OSError:
+                pass
+        # Cleanup WAL files
+        if os.path.exists(f"{self.test_db}-shm"):
+            try:
+                os.remove(f"{self.test_db}-shm")
+            except OSError:
+                pass
+        if os.path.exists(f"{self.test_db}-wal"):
+            try:
+                os.remove(f"{self.test_db}-wal")
+            except OSError:
+                pass
 
     def test_filter_new_identifiers(self):
         self.rss_service.mark_as_read("id1")
