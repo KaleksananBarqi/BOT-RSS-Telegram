@@ -15,6 +15,10 @@ os.environ['GROUP_ID'] = 'dummy_group_id'
 # Add src to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+# Mock environment variables for config
+os.environ['BOT_TOKEN'] = 'test_token'
+os.environ['GROUP_ID'] = 'test_group'
+
 from src.rss_service import RSSService
 
 class TestRSSServiceBulk(unittest.TestCase):
@@ -25,23 +29,12 @@ class TestRSSServiceBulk(unittest.TestCase):
         self.rss_service = RSSService(db_file=self.test_db)
 
     def tearDown(self):
-        if hasattr(self, 'rss_service') and self.rss_service.conn:
+        if hasattr(self, 'rss_service') and hasattr(self.rss_service, 'conn'):
             self.rss_service.conn.close()
 
         if os.path.exists(self.test_db):
             try:
                 os.remove(self.test_db)
-            except OSError:
-                pass
-        # Cleanup WAL files
-        if os.path.exists(f"{self.test_db}-shm"):
-            try:
-                os.remove(f"{self.test_db}-shm")
-            except OSError:
-                pass
-        if os.path.exists(f"{self.test_db}-wal"):
-            try:
-                os.remove(f"{self.test_db}-wal")
             except OSError:
                 pass
 
