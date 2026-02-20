@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 
 import signal
 import sys
-from config.config import RSS_URLS, DELAY_BETWEEN_POSTS, CHECK_INTERVAL_HOURS, MAX_NEWS_AGE_HOURS
+from config import RSS_URLS, DELAY_BETWEEN_POSTS, CHECK_INTERVAL_HOURS, MAX_NEWS_AGE_HOURS
 from src.rss_service import RSSService
 from src.bot_service import BotService
 

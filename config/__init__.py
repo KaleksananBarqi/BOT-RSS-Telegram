@@ -1,0 +1,10 @@
+from .config import (
+    RSS_URLS, 
+    DELAY_BETWEEN_POSTS, 
+    CHECK_INTERVAL_HOURS, 
+    MAX_NEWS_AGE_HOURS,
+    BOT_TOKEN,
+    GROUP_ID,
+    TOPIC_ID,
+    USER_AGENT
+)
