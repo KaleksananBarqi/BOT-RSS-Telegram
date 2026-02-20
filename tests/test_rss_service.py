@@ -75,6 +75,32 @@ class TestRSSService(unittest.TestCase):
         e3 = Entry({'summary': 'No image here'})
         self.assertIsNone(self.rss_service.extract_image(e3))
 
+        # Case 4: Media Thumbnail
+        e4 = Entry({
+            'media_thumbnail': [{'url': 'http://example.com/thumb.jpg'}]
+        })
+        self.assertEqual(self.rss_service.extract_image(e4), 'http://example.com/thumb.jpg')
+
+        # Case 5: Enclosures
+        e5 = Entry({
+            'enclosures': [{'url': 'http://example.com/enc.jpg', 'type': 'image/jpeg'}]
+        })
+        self.assertEqual(self.rss_service.extract_image(e5), 'http://example.com/enc.jpg')
+
+        # Case 6: Priority (Media Content > Media Thumbnail > Enclosures)
+        e6 = Entry({
+            'media_content': [{'url': 'http://example.com/content.jpg', 'type': 'image/jpeg'}],
+            'media_thumbnail': [{'url': 'http://example.com/thumb.jpg'}],
+            'enclosures': [{'url': 'http://example.com/enc.jpg', 'type': 'image/jpeg'}]
+        })
+        self.assertEqual(self.rss_service.extract_image(e6), 'http://example.com/content.jpg')
+
+        e7 = Entry({
+            'media_thumbnail': [{'url': 'http://example.com/thumb.jpg'}],
+            'enclosures': [{'url': 'http://example.com/enc.jpg', 'type': 'image/jpeg'}]
+        })
+        self.assertEqual(self.rss_service.extract_image(e7), 'http://example.com/thumb.jpg')
+
     def test_filter_entries_by_age(self):
         now = datetime.now(timezone.utc)
 
