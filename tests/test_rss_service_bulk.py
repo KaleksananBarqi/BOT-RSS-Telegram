@@ -8,6 +8,10 @@ sys.modules['feedparser'] = MagicMock()
 sys.modules['aiohttp'] = MagicMock()
 sys.modules['bs4'] = MagicMock()
 
+# Set dummy environment variables to bypass config check
+os.environ['BOT_TOKEN'] = 'dummy_token'
+os.environ['GROUP_ID'] = 'dummy_group_id'
+
 # Add src to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
