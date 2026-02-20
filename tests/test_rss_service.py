@@ -10,6 +10,10 @@ from unittest.mock import MagicMock, patch
 # Add src to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+# Mock environment variables for config
+os.environ['BOT_TOKEN'] = 'test_token'
+os.environ['GROUP_ID'] = 'test_group'
+
 from src.rss_service import RSSService
 
 class TestRSSService(unittest.TestCase):
