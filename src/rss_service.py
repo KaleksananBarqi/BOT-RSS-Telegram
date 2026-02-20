@@ -169,7 +169,8 @@ class RSSService:
             async with session.get(url, headers=headers, timeout=15) as response:
                 if response.status == 200:
                     content = await response.read()
-                    feed = feedparser.parse(content)
+                    loop = asyncio.get_event_loop()
+                    feed = await loop.run_in_executor(None, feedparser.parse, content)
                 elif response.status in [403, 429]:
                     logger.warning(f"Warning: Access denied (HTTP {response.status}). Site might be blocking bots.")
                     return []

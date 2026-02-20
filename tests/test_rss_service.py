@@ -28,10 +28,23 @@ class TestRSSService(unittest.TestCase):
 
     def tearDown(self):
         # Cleanup
+        if hasattr(self, 'rss_service'):
+            # Close connection if it exists
+            if self.rss_service.conn:
+                self.rss_service.conn.close()
+            # Note: We can't easily await rss_service.close() here because it's synchronous tearDown
+            # But conn.close() should be enough for file deletion
+        
         if os.path.exists(self.test_db):
-            os.remove(self.test_db)
+            try:
+                os.remove(self.test_db)
+            except PermissionError:
+                pass # Silently fail if still locked
         if os.path.exists(self.test_json):
-            os.remove(self.test_json)
+            try:
+                os.remove(self.test_json)
+            except PermissionError:
+                pass
 
     def test_init_db(self):
         """Test if DB is created."""
@@ -113,6 +126,8 @@ class TestRSSService(unittest.TestCase):
         self.assertFalse(service.is_new("old_id_1"))
         self.assertFalse(service.is_new("old_id_2"))
         self.assertTrue(service.is_new("new_id"))
+        
+        service.conn.close()
 
 if __name__ == '__main__':
     unittest.main()
