@@ -2,36 +2,6 @@ import os
 import sys
 from dotenv import load_dotenv
 
-# ==========================================
-# User Configuration
-# ==========================================
-
-# RSS Feed URLs
-RSS_URLS = [
-    'https://cryptoharian.com/feed/',
-    'https://www.crisisgroup.org/rss',
-    'https://decrypt.co/feed',
-    'https://id.beincrypto.com/feed/',
-    'https://www.investing.com/rss/news_287.rss',
-    'https://www.cnbc.com/id/10000664/device/rss/rss.html'
-]
-
-# Delay between posts (seconds)
-DELAY_BETWEEN_POSTS = 2
-
-# Check interval (hours)
-CHECK_INTERVAL_HOURS = 1
-
-# Instant View RHASH (Optional)
-IV_RHASH = ''
-
-# Max age of news to process (hours)
-MAX_NEWS_AGE_HOURS = 1
-
-# ==========================================
-# System Configuration
-# ==========================================
-
 # Load environment variables from .env file
 load_dotenv()
 
@@ -41,6 +11,34 @@ def get_env_variable(name, default=None, required=False):
         print(f"Error: Variable '{name}' is missing in .env file.")
         sys.exit(1)
     return value
+
+# ==========================================
+# User Configuration
+# ==========================================
+
+# RSS Feed URLs
+# Parse comma-separated list of URLs from environment variable
+_rss_urls_env = get_env_variable("RSS_URLS", default="")
+RSS_URLS = [url.strip() for url in _rss_urls_env.split(",") if url.strip()]
+
+if not RSS_URLS:
+    print("Warning: RSS_URLS environment variable is empty. No feeds will be monitored.")
+
+# Delay between posts (seconds)
+DELAY_BETWEEN_POSTS = int(get_env_variable("DELAY_BETWEEN_POSTS", default="2"))
+
+# Check interval (hours)
+CHECK_INTERVAL_HOURS = int(get_env_variable("CHECK_INTERVAL_HOURS", default="1"))
+
+# Instant View RHASH (Optional)
+IV_RHASH = get_env_variable("IV_RHASH", default="")
+
+# Max age of news to process (hours)
+MAX_NEWS_AGE_HOURS = int(get_env_variable("MAX_NEWS_AGE_HOURS", default="1"))
+
+# ==========================================
+# System Configuration
+# ==========================================
 
 # Bot Credentials
 BOT_TOKEN = get_env_variable("BOT_TOKEN", required=True)

@@ -121,15 +121,15 @@ Cara termudah dan terbersih untuk menjalankan bot.
 
 ## ⚙️ Konfigurasi Lanjutan
 
-Anda dapat mengubah perilaku bot melalui file `config/config.py`:
+Anda dapat mengubah perilaku bot melalui file `.env` (Environment Variables):
 
 | Variabel | Deskripsi | Default |
 | :--- | :--- | :--- |
-| `RSS_URLS` | Daftar URL feed RSS yang akan dipantau. | `[...]` |
+| `RSS_URLS` | Daftar URL feed RSS yang akan dipantau (dipisahkan koma). | `(Kosong)` |
 | `CHECK_INTERVAL_HOURS` | Seberapa sering bot mengecek berita (dalam jam). | `1` |
-| `DELAY_BETWEEN_POSTS` | Jeda waktu (detik) antar pesan agar tidak terkena rate limit. | `5` |
-| `MAX_NEWS_AGE_HOURS` | Batas umur berita. Berita lebih tua dari ini akan diabaikan. | `24` |
-| `IV_RHASH` | Hash template Instant View (opsional). | `None` |
+| `DELAY_BETWEEN_POSTS` | Jeda waktu (detik) antar pesan agar tidak terkena rate limit. | `2` |
+| `MAX_NEWS_AGE_HOURS` | Batas umur berita. Berita lebih tua dari ini akan diabaikan. | `1` |
+| `IV_RHASH` | Hash template Instant View (opsional). | `(Kosong)` |
 
 ---
 
