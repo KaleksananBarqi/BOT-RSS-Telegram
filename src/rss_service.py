@@ -8,6 +8,7 @@ import logging
 import sqlite3
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta, timezone
+from config.config import USER_AGENT
 
 
 # Workaround for SSL issues on some systems
@@ -156,7 +157,7 @@ class RSSService:
         
         # Headers untuk meniru browser asli
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'User-Agent': USER_AGENT,
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
             'Connection': 'keep-alive',
             'Upgrade-Insecure-Requests': '1',
