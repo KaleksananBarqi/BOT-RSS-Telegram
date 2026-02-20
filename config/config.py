@@ -47,4 +47,7 @@ BOT_TOKEN = get_env_variable("BOT_TOKEN", required=True)
 GROUP_ID = get_env_variable("GROUP_ID", required=True)
 TOPIC_ID = get_env_variable("TOPIC_ID") # Optional
 
+# User Agent for HTTP requests
+USER_AGENT = get_env_variable("USER_AGENT", default="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+
 print("Configuration loaded successfully.")
