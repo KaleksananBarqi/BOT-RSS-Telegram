@@ -84,6 +84,54 @@ class RSSService:
             return False
         return is_new
 
+    def filter_new_identifiers(self, identifiers):
+        """Mengecek daftar identifier mana yang baru (belum ada di database)."""
+        if not identifiers:
+            return []
+
+        try:
+            conn = sqlite3.connect(self.db_file)
+            c = conn.cursor()
+
+            # Chunking to avoid SQLite variable limit (default 999)
+            chunk_size = 900
+            existing_ids = set()
+
+            # Remove duplicates from input list to optimize query
+            unique_identifiers = list(dict.fromkeys(identifiers))
+
+            for i in range(0, len(unique_identifiers), chunk_size):
+                chunk = unique_identifiers[i:i + chunk_size]
+                placeholders = ','.join(['?'] * len(chunk))
+                c.execute(f"SELECT id FROM history WHERE id IN ({placeholders})", chunk)
+                for row in c.fetchall():
+                    existing_ids.add(row[0])
+
+            conn.close()
+
+            # Return identifiers that are not in existing_ids, preserving original order if possible
+            return [i for i in identifiers if i not in existing_ids]
+        except Exception as e:
+            logger.error(f"Database error in filter_new_identifiers: {e}")
+            return identifiers
+
+    def get_new_entries(self, entries):
+        """Memfilter list of entries dan mengembalikan hanya yang baru."""
+        if not entries:
+            return []
+
+        # Kita butuh list agar bisa diiterasi berulang atau diakses indexnya
+        entries_list = list(entries)
+
+        # Map entries to their identifiers
+        # Gunakan list identifier untuk bulk check
+        identifiers = [entry.get('id', entry.get('link')) for entry in entries_list]
+
+        new_ids = set(self.filter_new_identifiers(identifiers))
+
+        # Return entries yang identifiernya ada di new_ids, tetap menjaga order input
+        return [entry for entry in entries_list if entry.get('id', entry.get('link')) in new_ids]
+
     def mark_as_read(self, entry_id):
         """Menandai berita sebagai sudah dibaca/dikirim."""
         try:
