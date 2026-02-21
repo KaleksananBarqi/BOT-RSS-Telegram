@@ -21,8 +21,16 @@ class TestRSSServiceBulk(unittest.TestCase):
         self.rss_service = RSSService(db_file=self.test_db)
 
     def tearDown(self):
-        if os.path.exists(self.test_db):
-            os.remove(self.test_db)
+        if hasattr(self, 'rss_service') and self.rss_service.conn:
+            self.rss_service.conn.close()
+
+        for ext in ['', '-shm', '-wal']:
+            path = self.test_db + ext
+            if os.path.exists(path):
+                try:
+                    os.remove(path)
+                except Exception:
+                    pass
 
     def test_filter_new_identifiers(self):
         self.rss_service.mark_as_read("id1")
