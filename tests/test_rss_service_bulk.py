@@ -24,20 +24,26 @@ from src.rss_service import RSSService
 class TestRSSServiceBulk(unittest.TestCase):
     def setUp(self):
         self.test_db = 'tests/test_bulk.db'
-        if os.path.exists(self.test_db):
-            os.remove(self.test_db)
+        # Clean up any existing DB files
+        for ext in ['', '-wal', '-shm']:
+            f = self.test_db + ext
+            if os.path.exists(f):
+                try:
+                    os.remove(f)
+                except PermissionError:
+                    pass
         self.rss_service = RSSService(db_file=self.test_db)
 
     def tearDown(self):
         if hasattr(self, 'rss_service') and self.rss_service.conn:
             self.rss_service.conn.close()
 
-        for ext in ['', '-shm', '-wal']:
-            path = self.test_db + ext
-            if os.path.exists(path):
+        for ext in ['', '-wal', '-shm']:
+            f = self.test_db + ext
+            if os.path.exists(f):
                 try:
-                    os.remove(path)
-                except Exception:
+                    os.remove(f)
+                except PermissionError:
                     pass
 
     def test_filter_new_identifiers(self):
