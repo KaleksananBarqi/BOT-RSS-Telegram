@@ -114,6 +114,12 @@ class TestRSSService(unittest.TestCase):
         })
         self.assertEqual(self.rss_service.extract_image(e7), 'http://example.com/thumb.jpg')
 
+        # Case 8: Empty Media Thumbnail
+        e8 = Entry({
+            'media_thumbnail': []
+        })
+        self.assertIsNone(self.rss_service.extract_image(e8))
+
     def test_filter_entries_by_age(self):
         now = datetime.now(timezone.utc)
 
