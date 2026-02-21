@@ -1,6 +1,5 @@
 import telegram
 from telegram.request import HTTPXRequest
-import asyncio
 import logging
 import html
 from config.config import BOT_TOKEN, GROUP_ID, TOPIC_ID, IV_RHASH

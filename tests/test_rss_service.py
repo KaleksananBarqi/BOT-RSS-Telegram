@@ -43,23 +43,13 @@ class TestRSSService(unittest.TestCase):
             # Note: We can't easily await rss_service.close() here because it's synchronous tearDown
             # But conn.close() should be enough for file deletion
         
-        if os.path.exists(self.test_db):
-            try:
-                os.remove(self.test_db)
-            except OSError:
-                pass
-
-        # Cleanup WAL files
-        if os.path.exists(f"{self.test_db}-shm"):
-            try:
-                os.remove(f"{self.test_db}-shm")
-            except OSError:
-                pass
-        if os.path.exists(f"{self.test_db}-wal"):
-            try:
-                os.remove(f"{self.test_db}-wal")
-            except OSError:
-                pass
+        for ext in ['', '-shm', '-wal']:
+            path = self.test_db + ext
+            if os.path.exists(path):
+                try:
+                    os.remove(path)
+                except Exception:
+                    pass
 
         if os.path.exists(self.test_json):
             try:
@@ -135,6 +125,12 @@ class TestRSSService(unittest.TestCase):
         })
         self.assertEqual(self.rss_service.extract_image(e7), 'http://example.com/thumb.jpg')
 
+        # Case 8: Empty Media Thumbnail
+        e8 = Entry({
+            'media_thumbnail': []
+        })
+        self.assertIsNone(self.rss_service.extract_image(e8))
+
     def test_filter_entries_by_age(self):
         now = datetime.now(timezone.utc)
 
@@ -160,7 +156,7 @@ class TestRSSService(unittest.TestCase):
     def test_migration(self):
         # Create a dummy json file
         data = ["old_id_1", "old_id_2"]
-        with open(self.test_json, 'w') as f:
+        with open(self.test_json, 'w', encoding='utf-8') as f:
             json.dump(data, f)
 
         # Re-init service to trigger migration
@@ -175,6 +171,19 @@ class TestRSSService(unittest.TestCase):
         self.assertTrue(service.is_new("new_id"))
         
         service.conn.close()
+
+    def test_is_new_database_error(self):
+        """Test that is_new returns False when a database error occurs."""
+        with patch.object(self.rss_service, 'conn') as mock_conn:
+            mock_cursor = MagicMock()
+            mock_conn.cursor.return_value = mock_cursor
+            mock_cursor.execute.side_effect = sqlite3.Error("Simulated database error")
+
+            result = self.rss_service.is_new("some_entry_id")
+
+            # According to the code, it should return False on exception
+            self.assertFalse(result)
+            mock_conn.cursor.assert_called_once()
 
 if __name__ == '__main__':
     unittest.main()
