@@ -95,6 +95,8 @@ class RSSService:
             return []
 
         try:
+            c = self.conn.cursor()
+
             # Chunking to avoid SQLite variable limit (default 999)
             chunk_size = 900
             existing_ids = set()
@@ -102,13 +104,12 @@ class RSSService:
             # Remove duplicates from input list to optimize query
             unique_identifiers = list(dict.fromkeys(identifiers))
 
-            with self._get_cursor() as c:
-                for i in range(0, len(unique_identifiers), chunk_size):
-                    chunk = unique_identifiers[i:i + chunk_size]
-                    placeholders = ','.join(['?'] * len(chunk))
-                    c.execute(f"SELECT id FROM history WHERE id IN ({placeholders})", chunk)
-                    for row in c.fetchall():
-                        existing_ids.add(row[0])
+            for i in range(0, len(unique_identifiers), chunk_size):
+                chunk = unique_identifiers[i:i + chunk_size]
+                placeholders = ','.join(['?'] * len(chunk))
+                c.execute(f"SELECT id FROM history WHERE id IN ({placeholders})", chunk)
+                for row in c.fetchall():
+                    existing_ids.add(row[0])
 
             # Return identifiers that are not in existing_ids, preserving original order if possible
             return [i for i in identifiers if i not in existing_ids]
