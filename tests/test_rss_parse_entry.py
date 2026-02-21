@@ -71,7 +71,11 @@ class TestRSSParseEntry(unittest.TestCase):
         self.assertEqual(result['summary'], 'This is a summary.')
         self.assertEqual(result['image_url'], 'http://example.com/image.jpg')
 
-        self.rss_service.extract_image.assert_called_once_with(entry)
+        # Check that extract_image was called with the entry and some soup object
+        self.rss_service.extract_image.assert_called_once()
+        args, kwargs = self.rss_service.extract_image.call_args
+        self.assertEqual(args[0], entry)
+        self.assertIn('soup', kwargs)
 
     def test_parse_entry_html_cleaning(self):
         """Test that HTML tags are removed from summary."""
