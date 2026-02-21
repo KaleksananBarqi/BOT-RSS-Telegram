@@ -2,6 +2,7 @@ import feedparser
 import json
 import os
 import ssl
+import urllib.request
 import aiohttp
 import asyncio
 import logging
@@ -199,6 +200,12 @@ class RSSService:
         if hasattr(self, 'conn') and self.conn:
             self.conn.close()
 
+    def _fetch_feed_blocking(self, url, timeout=30):
+        """Helper blocking untuk mengambil feed dengan timeout."""
+        req = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            return response.read()
+
     async def fetch_feed(self, url):
         """Mengambil dan memparsing data RSS dengan aiohttp + headers."""
         logger.info(f"Fetching feed from: {url}")
@@ -229,10 +236,11 @@ class RSSService:
 
         except Exception as e:
             logger.error(f"Error fetching feed via aiohttp: {e}")
-            # Fallback ke feedparser standard jika gagal total (blocking, run in executor)
+            # Fallback ke urllib dengan timeout jika gagal total (blocking, run in executor)
             try:
                 loop = asyncio.get_event_loop()
-                feed = await loop.run_in_executor(None, feedparser.parse, url)
+                content = await loop.run_in_executor(None, self._fetch_feed_blocking, url)
+                feed = await loop.run_in_executor(None, feedparser.parse, content)
             except Exception as e2:
                 logger.error(f"Fallback failed: {e2}")
                 return []
