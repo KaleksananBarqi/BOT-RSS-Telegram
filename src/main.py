@@ -21,12 +21,14 @@ logger = logging.getLogger(__name__)
 class RSSBot:
     def __init__(self):
         self.running = True
+        self.stop_event = asyncio.Event()
         self.rss_service = None
         self.bot_service = None
 
     def stop(self, *args):
         logger.info("Stopping bot...")
         self.running = False
+        self.stop_event.set()
 
     async def run(self):
         # Setup Signal Handler
@@ -86,11 +88,10 @@ class RSSBot:
 
                     logger.info(f"Menunggu {int(wait_seconds // 60)} menit dan {int(wait_seconds % 60)} detik hingga pukul {target_time.strftime('%H:%M')}...")
 
-                    # Wait loop dengan interrupt check
-                    # Kita loop per 1 detik agar bisa di-break (Ctrl+C)
-                    end_time = datetime.now().timestamp() + wait_seconds
-                    while self.running and datetime.now().timestamp() < end_time:
-                        await asyncio.sleep(1)
+                    try:
+                        await asyncio.wait_for(self.stop_event.wait(), timeout=wait_seconds)
+                    except asyncio.TimeoutError:
+                        pass
         finally:
             if self.rss_service:
                 await self.rss_service.close()

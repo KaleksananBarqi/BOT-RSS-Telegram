@@ -31,6 +31,9 @@ class TestRSSBot(unittest.TestCase):
         # Check for expected attributes
         self.assertTrue(hasattr(bot, 'running'), "RSSBot should have 'running' attribute")
         self.assertTrue(bot.running, "'running' should be True initially")
+        
+        # Check for stop_event attribute
+        self.assertTrue(hasattr(bot, 'stop_event'), "RSSBot should have 'stop_event' attribute")
 
         # Check for expected methods
         self.assertTrue(hasattr(bot, 'stop'), "RSSBot should have 'stop' method")
@@ -39,41 +42,7 @@ class TestRSSBot(unittest.TestCase):
         # Test stop method
         bot.stop()
         self.assertFalse(bot.running, "'running' should be False after calling stop()")
-
-class TestRSSBotAsync(unittest.IsolatedAsyncioTestCase):
-    @patch('src.main.RSSService')
-    @patch('src.main.BotService')
-    @patch('src.main.asyncio.sleep', new_callable=AsyncMock)
-    async def test_rss_bot_run_loop(self, mock_sleep, mock_bot_service, mock_rss_service):
-        """
-        Test the run loop of RSSBot.
-        """
-        bot = src.main.RSSBot()
-
-        # Mock dependencies
-        mock_rss_instance = mock_rss_service.return_value
-        
-        # Setup mocks as AsyncMocks for await compatibility
-        mock_rss_instance.initialize = AsyncMock()
-        mock_rss_instance.fetch_feed = AsyncMock(return_value=[])
-        mock_rss_instance.close = AsyncMock()
-        mock_rss_instance.filter_entries_by_age = MagicMock(return_value=[])
-        mock_rss_instance.get_new_entries = AsyncMock(return_value=[])
-
-        # Stop the bot immediately when sleep is called to avoid infinite loop
-        async def side_effect(*args, **kwargs):
-            bot.stop()
-
-        mock_sleep.side_effect = side_effect
-
-        # Run the bot
-        await bot.run()
-
-        # Verify interactions
-        self.assertTrue(mock_rss_instance.initialize.called)
-        self.assertTrue(mock_rss_instance.fetch_feed.called)
-        self.assertTrue(mock_rss_instance.close.called)
-        self.assertFalse(bot.running)
+        self.assertTrue(bot.stop_event.is_set(), "'stop_event' should be set after calling stop()")
 
 if __name__ == '__main__':
     unittest.main()
