@@ -11,6 +11,8 @@ from bs4 import BeautifulSoup
 from datetime import datetime, timedelta, timezone
 from config.config import USER_AGENT
 
+MAX_FEED_SIZE = 10 * 1024 * 1024  # 10MB limit for RSS feed responses
+
 
 
 logger = logging.getLogger(__name__)
@@ -201,7 +203,27 @@ class RSSService:
         """Helper blocking untuk mengambil feed dengan timeout."""
         req = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
         with urllib.request.urlopen(req, timeout=timeout) as response:
-            return response.read()
+            content = b""
+            while True:
+                chunk = response.read(8192)
+                if not chunk:
+                    break
+                content += chunk
+                if len(content) > MAX_FEED_SIZE:
+                    raise ValueError(f"Response too large ({len(content)} bytes)")
+            return content
+
+    async def _read_response_with_limit(self, response):
+        """Read response content with size limit to prevent DoS via unbounded reads."""
+        content = b""
+        while True:
+            chunk = await response.read(8192)
+            if not chunk:
+                break
+            content += chunk
+            if len(content) > MAX_FEED_SIZE:
+                raise ValueError(f"Response too large ({len(content)} bytes)")
+        return content
 
     async def fetch_feed(self, url):
         """Mengambil dan memparsing data RSS dengan aiohttp + headers."""
@@ -221,7 +243,7 @@ class RSSService:
             session = await self._get_session()
             async with session.get(url, headers=headers, timeout=15) as response:
                 if response.status == 200:
-                    content = await response.read()
+                    content = await self._read_response_with_limit(response)
                     loop = asyncio.get_running_loop()
                     feed = await loop.run_in_executor(None, feedparser.parse, content)
                 elif response.status in [403, 429]:
