@@ -229,6 +229,16 @@ class RSSService:
         """Mengambil dan memparsing data RSS dengan aiohttp + headers."""
         logger.info(f"Fetching feed from: {url}")
         
+        # Validate URL scheme to prevent SSRF/local file read
+        from urllib.parse import urlparse
+        parsed_url = urlparse(url)
+        if parsed_url.scheme not in ('http', 'https'):
+            logger.error(f"Invalid URL scheme: {parsed_url.scheme}. Only http and https are allowed.")
+            return []
+        if not parsed_url.netloc:
+            logger.error(f"Invalid URL: missing network location.")
+            return []
+        
         # Headers untuk meniru browser asli
         headers = {
             'User-Agent': USER_AGENT,
