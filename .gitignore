@@ -37,3 +37,8 @@ data/history.json
 data/bot.db
 tests/test_bot.db
 tests/test_history.json
+
+# SQLite temporary files
+*.db
+*.db-shm
+*.db-wal
