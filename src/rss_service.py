@@ -9,6 +9,7 @@ import logging
 import sqlite3
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta, timezone
+from contextlib import contextmanager
 from config.config import USER_AGENT
 
 
@@ -30,25 +31,38 @@ class RSSService:
         self._init_db()
         self._migrate_json_to_db()
 
+    @contextmanager
+    def _get_cursor(self):
+        """Context manager untuk mendapatkan database cursor."""
+        cursor = self.conn.cursor()
+        try:
+            yield cursor
+            self.conn.commit()
+        except Exception:
+            self.conn.rollback()
+            raise
+        finally:
+            cursor.close()
+
     def _init_db(self):
         """Inisialisasi database SQLite."""
         try:
-            c = self.conn.cursor()
-            c.execute('''CREATE TABLE IF NOT EXISTS history
-                         (id TEXT PRIMARY KEY, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-            # Optional: Index on created_at if we want to prune later
-            c.execute('''CREATE INDEX IF NOT EXISTS idx_created_at ON history(created_at)''')
-            self.conn.commit()
+            with self._get_cursor() as c:
+                c.execute('''CREATE TABLE IF NOT EXISTS history
+                             (id TEXT PRIMARY KEY, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+                # Optional: Index on created_at if we want to prune later
+                c.execute('''CREATE INDEX IF NOT EXISTS idx_created_at ON history(created_at)''')
         except Exception as e:
             logger.error(f"Failed to initialize database: {e}")
 
     def _migrate_json_to_db(self):
         """Migrasi data dari JSON lama ke SQLite jika ada."""
-        if os.path.exists(self.json_history_file):
-            c = self.conn.cursor()
+        if not os.path.exists(self.json_history_file):
+            return
 
-            # Cek apakah DB masih kosong (hanya migrasi jika kosong/baru)
-            try:
+        try:
+            with self._get_cursor() as c:
+                # Cek apakah DB masih kosong (hanya migrasi jika kosong/baru)
                 c.execute("SELECT count(*) FROM history")
                 count = c.fetchone()[0]
 
@@ -60,21 +74,20 @@ class RSSService:
                             if isinstance(history, list):
                                 for item in history:
                                     c.execute("INSERT OR IGNORE INTO history (id) VALUES (?)", (str(item),))
-                                self.conn.commit()
                                 logger.info(f"Migration complete. Imported {len(history)} items.")
                             else:
                                 logger.warning("JSON history format invalid, skipping migration.")
                     except (json.JSONDecodeError, IOError) as e:
                         logger.error(f"Failed to read JSON history for migration: {e}")
-            except Exception as e:
-                logger.error(f"Migration check failed: {e}")
+        except Exception as e:
+            logger.error(f"Migration check failed: {e}")
 
     def is_new(self, entry_id):
         """Mengecek apakah berita ini baru."""
         try:
-            c = self.conn.cursor()
-            c.execute("SELECT 1 FROM history WHERE id = ?", (entry_id,))
-            return c.fetchone() is None
+            with self._get_cursor() as c:
+                c.execute("SELECT 1 FROM history WHERE id = ?", (entry_id,))
+                return c.fetchone() is None
         except Exception as e:
             logger.error(f"Database error in is_new: {e}")
             return False
@@ -85,9 +98,6 @@ class RSSService:
             return []
 
         try:
-            conn = sqlite3.connect(self.db_file)
-            c = conn.cursor()
-
             # Chunking to avoid SQLite variable limit (default 999)
             chunk_size = 900
             existing_ids = set()
@@ -95,14 +105,13 @@ class RSSService:
             # Remove duplicates from input list to optimize query
             unique_identifiers = list(dict.fromkeys(identifiers))
 
-            for i in range(0, len(unique_identifiers), chunk_size):
-                chunk = unique_identifiers[i:i + chunk_size]
-                placeholders = ','.join(['?'] * len(chunk))
-                c.execute(f"SELECT id FROM history WHERE id IN ({placeholders})", chunk)
-                for row in c.fetchall():
-                    existing_ids.add(row[0])
-
-            conn.close()
+            with self._get_cursor() as c:
+                for i in range(0, len(unique_identifiers), chunk_size):
+                    chunk = unique_identifiers[i:i + chunk_size]
+                    placeholders = ','.join(['?'] * len(chunk))
+                    c.execute(f"SELECT id FROM history WHERE id IN ({placeholders})", chunk)
+                    for row in c.fetchall():
+                        existing_ids.add(row[0])
 
             # Return identifiers that are not in existing_ids, preserving original order if possible
             return [i for i in identifiers if i not in existing_ids]
@@ -130,9 +139,8 @@ class RSSService:
     def mark_as_read(self, entry_id):
         """Menandai berita sebagai sudah dibaca/dikirim."""
         try:
-            c = self.conn.cursor()
-            c.execute("INSERT OR IGNORE INTO history (id) VALUES (?)", (entry_id,))
-            self.conn.commit()
+            with self._get_cursor() as c:
+                c.execute("INSERT OR IGNORE INTO history (id) VALUES (?)", (entry_id,))
         except Exception as e:
             logger.error(f"Failed to save history: {e}")
 
