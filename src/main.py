@@ -49,37 +49,16 @@ class RSSBot:
         try:
             while self.running:
                 try:
-                    for url in RSS_URLS:
-                        if not self.running: break
-
-                        # Fetch feed
-                        entries = await self.rss_service.fetch_feed(url)
-
-                        # Filter by age
-                        entries = self.rss_service.filter_entries_by_age(entries, MAX_NEWS_AGE_HOURS)
-
-                        # Process entries from oldest to newest
-                        new_entries = await self.rss_service.get_new_entries(reversed(entries))
-
-                        if new_entries:
-                            logger.info(f"[{url}] Found {len(new_entries)} new articles.")
-
-                            for entry in new_entries:
-                                if not self.running: break
-
-                                parsed_data = self.rss_service.parse_entry(entry)
-                                identifier = parsed_data['id']
-
-                                # Send to Telegram
-                                success = await self.bot_service.send_post(parsed_data)
-
-                                if success:
-                                    await self.rss_service.mark_as_read(identifier)
-                                    await asyncio.sleep(DELAY_BETWEEN_POSTS)
-                                else:
-                                    logger.error(f"Failed to send: {identifier}")
-                        else:
-                            pass
+                    async def create_task(url):
+                        running_flag = lambda r=self.running: r
+                        return await process_feed(url, self.rss_service, self.bot_service, running_flag)
+                    
+                    tasks = [create_task(url) for url in RSS_URLS]
+                    results = await asyncio.gather(*tasks, return_exceptions=True)
+                    
+                    for url, result in zip(RSS_URLS, results):
+                        if isinstance(result, Exception):
+                            logger.error(f"Error processing feed {url}: {result}")
 
                 except Exception as e:
                     logger.error(f"An error occurred in main loop: {e}", exc_info=True)
@@ -118,7 +97,7 @@ class RSSBot:
 
         logger.info("Bot stopped successfully.")
 
-async def process_feed(url, rss_service, bot_service):
+async def process_feed(url, rss_service, bot_service, running_flag):
     """Processes a single RSS feed."""
     # Fetch feed
     entries = await rss_service.fetch_feed(url)
@@ -133,7 +112,7 @@ async def process_feed(url, rss_service, bot_service):
         logger.info(f"[{url}] Found {len(new_entries)} new articles.")
 
         for entry in new_entries:
-            if not running: break
+            if not running_flag(): break
 
             parsed_data = rss_service.parse_entry(entry)
             identifier = parsed_data['id']
@@ -147,13 +126,13 @@ async def process_feed(url, rss_service, bot_service):
             else:
                 logger.error(f"Failed to send: {identifier}")
 
-async def wait_until_next_run(wait_seconds):
+async def wait_until_next_run(wait_seconds, running_flag):
     """Waits for the specified duration, checking running flag."""
     target_time = datetime.now() + timedelta(seconds=wait_seconds)
     logger.info(f"Menunggu {int(wait_seconds // 60)} menit dan {int(wait_seconds % 60)} detik hingga pukul {target_time.strftime('%H:%M')}...")
 
     end_time = datetime.now().timestamp() + wait_seconds
-    while running and datetime.now().timestamp() < end_time:
+    while running_flag() and datetime.now().timestamp() < end_time:
         await asyncio.sleep(1)
 
 def calculate_wait_seconds(now, interval_hours):

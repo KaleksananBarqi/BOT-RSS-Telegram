@@ -52,24 +52,25 @@ class TestRSSBotAsync(unittest.IsolatedAsyncioTestCase):
 
         # Mock dependencies
         mock_rss_instance = mock_rss_service.return_value
-        # mock_bot_service is not used directly but BotService() is called
-
-        # Setup mocks
+        
+        # Setup mocks as AsyncMocks for await compatibility
+        mock_rss_instance.initialize = AsyncMock()
         mock_rss_instance.fetch_feed = AsyncMock(return_value=[])
         mock_rss_instance.close = AsyncMock()
+        mock_rss_instance.filter_entries_by_age = MagicMock(return_value=[])
+        mock_rss_instance.get_new_entries = AsyncMock(return_value=[])
 
         # Stop the bot immediately when sleep is called to avoid infinite loop
-        # The main loop calls sleep at the end of the iteration
         async def side_effect(*args, **kwargs):
             bot.stop()
 
         mock_sleep.side_effect = side_effect
 
         # Run the bot
-        # It should run one iteration then hit sleep, which stops it.
         await bot.run()
 
         # Verify interactions
+        self.assertTrue(mock_rss_instance.initialize.called)
         self.assertTrue(mock_rss_instance.fetch_feed.called)
         self.assertTrue(mock_rss_instance.close.called)
         self.assertFalse(bot.running)

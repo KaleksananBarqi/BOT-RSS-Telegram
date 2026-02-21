@@ -132,18 +132,21 @@ class RSSService:
         # 1. Cek Media Content (biasa di RSS modern)
         if 'media_content' in entry:
             for media in entry.media_content:
-                if media.get('type', '').startswith('image') or media.get('medium') == 'image':
-                    return media['url']
+                if (media.get('type', '').startswith('image') or media.get('medium') == 'image'):
+                    if media.get('url'):
+                        return media['url']
         
         # 2. Cek Media Thumbnail
         if 'media_thumbnail' in entry and entry.media_thumbnail:
-            return entry.media_thumbnail[0]['url']
+            if entry.media_thumbnail[0].get('url'):
+                return entry.media_thumbnail[0]['url']
 
         # 3. Cek Enclosures
         if 'enclosures' in entry:
             for enclosure in entry.enclosures:
                 if enclosure.get('type', '').startswith('image/'):
-                    return enclosure['url']
+                    if enclosure.get('url'):
+                        return enclosure['url']
 
         # 4. Parsing HTML Description/Summary
         if soup is None:

@@ -46,3 +46,4 @@ tests/test_history.json
 *.db
 *.db-shm
 *.db-wal
+.agents/implementation_plan.md
