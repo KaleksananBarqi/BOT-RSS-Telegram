@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 from config.config import USER_AGENT
 
 
+
 logger = logging.getLogger(__name__)
 
 class RSSService:
@@ -126,7 +127,7 @@ class RSSService:
         except Exception as e:
             logger.error(f"Failed to save history: {e}")
 
-    def extract_image(self, entry):
+    def extract_image(self, entry, soup=None):
         """Mencoba mengekstrak gambar dari entry RSS."""
         # 1. Cek Media Content (biasa di RSS modern)
         if 'media_content' in entry:
@@ -145,9 +146,12 @@ class RSSService:
                     return enclosure['url']
 
         # 4. Parsing HTML Description/Summary
-        content = entry.get('summary', '') or entry.get('description', '')
-        if content:
-            soup = BeautifulSoup(content, 'html.parser')
+        if soup is None:
+            content = entry.get('summary', '') or entry.get('description', '')
+            if content:
+                soup = BeautifulSoup(content, 'html.parser')
+
+        if soup:
             img_tag = soup.find('img')
             if img_tag and img_tag.get('src'):
                 return img_tag['src']
@@ -224,6 +228,9 @@ class RSSService:
                     logger.warning(f"Warning: Failed to fetch feed (HTTP {response.status})")
                     return []
 
+        except (aiohttp.ClientConnectorSSLError, aiohttp.ServerFingerprintMismatch) as e:
+            logger.error(f"SSL Verification failed for {url}: {e}")
+            return []
         except Exception as e:
             logger.error(f"Error fetching feed via aiohttp: {e}")
             # Fallback ke urllib dengan timeout jika gagal total (blocking, run in executor)
@@ -242,11 +249,16 @@ class RSSService:
 
     def parse_entry(self, entry):
         """Membersihkan dan memformat data entry."""
-        image_url = self.extract_image(entry)
-        
         raw_summary = entry.get('summary', '') or entry.get('description', '')
-        soup = BeautifulSoup(raw_summary, 'html.parser')
-        clean_summary = soup.get_text()[:300] + "..." if len(soup.get_text()) > 300 else soup.get_text()
+        soup = BeautifulSoup(raw_summary, 'html.parser') if raw_summary else None
+
+        image_url = self.extract_image(entry, soup=soup)
+
+        if soup:
+            text = soup.get_text()
+            clean_summary = text[:300] + "..." if len(text) > 300 else text
+        else:
+            clean_summary = ''
 
         return {
             'id': entry.get('id', entry.get('link')),
