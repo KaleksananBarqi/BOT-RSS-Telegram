@@ -155,5 +155,20 @@ class TestRSSService(unittest.TestCase):
         
         service.conn.close()
 
+    def test_filter_new_identifiers(self):
+        # Insert some IDs
+        self.rss_service.mark_as_read("id1")
+        self.rss_service.mark_as_read("id2")
+
+        # Check
+        identifiers = ["id1", "id2", "id3", "id4"]
+        new_ids = self.rss_service.filter_new_identifiers(identifiers)
+
+        self.assertNotIn("id1", new_ids)
+        self.assertNotIn("id2", new_ids)
+        self.assertIn("id3", new_ids)
+        self.assertIn("id4", new_ids)
+        self.assertEqual(len(new_ids), 2)
+
 if __name__ == '__main__':
     unittest.main()

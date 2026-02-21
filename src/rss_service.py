@@ -84,8 +84,7 @@ class RSSService:
             return []
 
         try:
-            conn = sqlite3.connect(self.db_file)
-            c = conn.cursor()
+            c = self.conn.cursor()
 
             # Chunking to avoid SQLite variable limit (default 999)
             chunk_size = 900
@@ -101,7 +100,7 @@ class RSSService:
                 for row in c.fetchall():
                     existing_ids.add(row[0])
 
-            conn.close()
+            c.close()
 
             # Return identifiers that are not in existing_ids, preserving original order if possible
             return [i for i in identifiers if i not in existing_ids]
