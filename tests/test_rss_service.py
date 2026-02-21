@@ -176,5 +176,18 @@ class TestRSSService(unittest.TestCase):
         
         service.conn.close()
 
+    def test_is_new_database_error(self):
+        """Test that is_new returns False when a database error occurs."""
+        with patch.object(self.rss_service, 'conn') as mock_conn:
+            mock_cursor = MagicMock()
+            mock_conn.cursor.return_value = mock_cursor
+            mock_cursor.execute.side_effect = sqlite3.Error("Simulated database error")
+
+            result = self.rss_service.is_new("some_entry_id")
+
+            # According to the code, it should return False on exception
+            self.assertFalse(result)
+            mock_conn.cursor.assert_called_once()
+
 if __name__ == '__main__':
     unittest.main()
