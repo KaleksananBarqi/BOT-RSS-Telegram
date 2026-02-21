@@ -41,3 +41,8 @@ tests/*.db
 tests/*.db-wal
 tests/*.db-shm
 tests/test_history.json
+
+# SQLite temporary files
+*.db
+*.db-shm
+*.db-wal

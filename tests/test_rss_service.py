@@ -43,23 +43,13 @@ class TestRSSService(unittest.TestCase):
             # Note: We can't easily await rss_service.close() here because it's synchronous tearDown
             # But conn.close() should be enough for file deletion
         
-        if os.path.exists(self.test_db):
-            try:
-                os.remove(self.test_db)
-            except OSError:
-                pass
-
-        # Cleanup WAL files
-        if os.path.exists(f"{self.test_db}-shm"):
-            try:
-                os.remove(f"{self.test_db}-shm")
-            except OSError:
-                pass
-        if os.path.exists(f"{self.test_db}-wal"):
-            try:
-                os.remove(f"{self.test_db}-wal")
-            except OSError:
-                pass
+        for ext in ['', '-shm', '-wal']:
+            path = self.test_db + ext
+            if os.path.exists(path):
+                try:
+                    os.remove(path)
+                except Exception:
+                    pass
 
         if os.path.exists(self.test_json):
             try:
