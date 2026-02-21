@@ -2,12 +2,14 @@ import feedparser
 import json
 import os
 import ssl
+import urllib.request
 import aiohttp
 import asyncio
 import logging
 import sqlite3
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta, timezone
+from contextlib import contextmanager
 from config.config import USER_AGENT
 
 
@@ -26,51 +28,63 @@ class RSSService:
         self._init_db()
         self._migrate_json_to_db()
 
+    @contextmanager
+    def _get_cursor(self):
+        """Context manager untuk mendapatkan database cursor."""
+        cursor = self.conn.cursor()
+        try:
+            yield cursor
+            self.conn.commit()
+        except Exception:
+            self.conn.rollback()
+            raise
+        finally:
+            cursor.close()
+
     def _init_db(self):
         """Inisialisasi database SQLite."""
         try:
-            c = self.conn.cursor()
-            c.execute('''CREATE TABLE IF NOT EXISTS history
-                         (id TEXT PRIMARY KEY, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-            # Optional: Index on created_at if we want to prune later
-            c.execute('''CREATE INDEX IF NOT EXISTS idx_created_at ON history(created_at)''')
-            self.conn.commit()
+            with self._get_cursor() as c:
+                c.execute('''CREATE TABLE IF NOT EXISTS history
+                             (id TEXT PRIMARY KEY, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+                # Optional: Index on created_at if we want to prune later
+                c.execute('''CREATE INDEX IF NOT EXISTS idx_created_at ON history(created_at)''')
         except Exception as e:
             logger.error(f"Failed to initialize database: {e}")
 
     def _migrate_json_to_db(self):
         """Migrasi data dari JSON lama ke SQLite jika ada."""
-        if os.path.exists(self.json_history_file):
-            c = self.conn.cursor()
+        if not os.path.exists(self.json_history_file):
+            return
 
-            # Cek apakah DB masih kosong (hanya migrasi jika kosong/baru)
-            try:
+        try:
+            with self._get_cursor() as c:
+                # Cek apakah DB masih kosong (hanya migrasi jika kosong/baru)
                 c.execute("SELECT count(*) FROM history")
                 count = c.fetchone()[0]
 
                 if count == 0:
                     logger.info("Migrating history from JSON to SQLite...")
                     try:
-                        with open(self.json_history_file, 'r') as f:
+                        with open(self.json_history_file, 'r', encoding='utf-8') as f:
                             history = json.load(f)
                             if isinstance(history, list):
                                 for item in history:
                                     c.execute("INSERT OR IGNORE INTO history (id) VALUES (?)", (str(item),))
-                                self.conn.commit()
                                 logger.info(f"Migration complete. Imported {len(history)} items.")
                             else:
                                 logger.warning("JSON history format invalid, skipping migration.")
                     except (json.JSONDecodeError, IOError) as e:
                         logger.error(f"Failed to read JSON history for migration: {e}")
-            except Exception as e:
-                logger.error(f"Migration check failed: {e}")
+        except Exception as e:
+            logger.error(f"Migration check failed: {e}")
 
     def is_new(self, entry_id):
         """Mengecek apakah berita ini baru."""
         try:
-            c = self.conn.cursor()
-            c.execute("SELECT 1 FROM history WHERE id = ?", (entry_id,))
-            return c.fetchone() is None
+            with self._get_cursor() as c:
+                c.execute("SELECT 1 FROM history WHERE id = ?", (entry_id,))
+                return c.fetchone() is None
         except Exception as e:
             logger.error(f"Database error in is_new: {e}")
             return False
@@ -81,9 +95,6 @@ class RSSService:
             return []
 
         try:
-            conn = sqlite3.connect(self.db_file)
-            c = conn.cursor()
-
             # Chunking to avoid SQLite variable limit (default 999)
             chunk_size = 900
             existing_ids = set()
@@ -91,14 +102,13 @@ class RSSService:
             # Remove duplicates from input list to optimize query
             unique_identifiers = list(dict.fromkeys(identifiers))
 
-            for i in range(0, len(unique_identifiers), chunk_size):
-                chunk = unique_identifiers[i:i + chunk_size]
-                placeholders = ','.join(['?'] * len(chunk))
-                c.execute(f"SELECT id FROM history WHERE id IN ({placeholders})", chunk)
-                for row in c.fetchall():
-                    existing_ids.add(row[0])
-
-            conn.close()
+            with self._get_cursor() as c:
+                for i in range(0, len(unique_identifiers), chunk_size):
+                    chunk = unique_identifiers[i:i + chunk_size]
+                    placeholders = ','.join(['?'] * len(chunk))
+                    c.execute(f"SELECT id FROM history WHERE id IN ({placeholders})", chunk)
+                    for row in c.fetchall():
+                        existing_ids.add(row[0])
 
             # Return identifiers that are not in existing_ids, preserving original order if possible
             return [i for i in identifiers if i not in existing_ids]
@@ -126,13 +136,12 @@ class RSSService:
     def mark_as_read(self, entry_id):
         """Menandai berita sebagai sudah dibaca/dikirim."""
         try:
-            c = self.conn.cursor()
-            c.execute("INSERT OR IGNORE INTO history (id) VALUES (?)", (entry_id,))
-            self.conn.commit()
+            with self._get_cursor() as c:
+                c.execute("INSERT OR IGNORE INTO history (id) VALUES (?)", (entry_id,))
         except Exception as e:
             logger.error(f"Failed to save history: {e}")
 
-    def extract_image(self, entry):
+    def extract_image(self, entry, soup=None):
         """Mencoba mengekstrak gambar dari entry RSS."""
         # 1. Cek Media Content (biasa di RSS modern)
         if 'media_content' in entry:
@@ -141,7 +150,7 @@ class RSSService:
                     return media['url']
         
         # 2. Cek Media Thumbnail
-        if 'media_thumbnail' in entry:
+        if 'media_thumbnail' in entry and entry.media_thumbnail:
             return entry.media_thumbnail[0]['url']
 
         # 3. Cek Enclosures
@@ -151,9 +160,12 @@ class RSSService:
                     return enclosure['url']
 
         # 4. Parsing HTML Description/Summary
-        content = entry.get('summary', '') or entry.get('description', '')
-        if content:
-            soup = BeautifulSoup(content, 'html.parser')
+        if soup is None:
+            content = entry.get('summary', '') or entry.get('description', '')
+            if content:
+                soup = BeautifulSoup(content, 'html.parser')
+
+        if soup:
             img_tag = soup.find('img')
             if img_tag and img_tag.get('src'):
                 return img_tag['src']
@@ -196,6 +208,12 @@ class RSSService:
         if hasattr(self, 'conn') and self.conn:
             self.conn.close()
 
+    def _fetch_feed_blocking(self, url, timeout=30):
+        """Helper blocking untuk mengambil feed dengan timeout."""
+        req = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            return response.read()
+
     async def fetch_feed(self, url):
         """Mengambil dan memparsing data RSS dengan aiohttp + headers."""
         logger.info(f"Fetching feed from: {url}")
@@ -229,10 +247,11 @@ class RSSService:
             return []
         except Exception as e:
             logger.error(f"Error fetching feed via aiohttp: {e}")
-            # Fallback ke feedparser standard jika gagal total (blocking, run in executor)
+            # Fallback ke urllib dengan timeout jika gagal total (blocking, run in executor)
             try:
-                loop = asyncio.get_running_loop()
-                feed = await loop.run_in_executor(None, feedparser.parse, url)
+                loop = asyncio.get_event_loop()
+                content = await loop.run_in_executor(None, self._fetch_feed_blocking, url)
+                feed = await loop.run_in_executor(None, feedparser.parse, content)
             except Exception as e2:
                 logger.error(f"Fallback failed: {e2}")
                 return []
@@ -244,11 +263,16 @@ class RSSService:
 
     def parse_entry(self, entry):
         """Membersihkan dan memformat data entry."""
-        image_url = self.extract_image(entry)
-        
         raw_summary = entry.get('summary', '') or entry.get('description', '')
-        soup = BeautifulSoup(raw_summary, 'html.parser')
-        clean_summary = soup.get_text()[:300] + "..." if len(soup.get_text()) > 300 else soup.get_text()
+        soup = BeautifulSoup(raw_summary, 'html.parser') if raw_summary else None
+
+        image_url = self.extract_image(entry, soup=soup)
+
+        if soup:
+            text = soup.get_text()
+            clean_summary = text[:300] + "..." if len(text) > 300 else text
+        else:
+            clean_summary = ''
 
         return {
             'id': entry.get('id', entry.get('link')),
