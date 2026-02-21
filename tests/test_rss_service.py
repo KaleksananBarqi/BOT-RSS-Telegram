@@ -7,8 +7,16 @@ import json
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
+# Set dummy environment variables to bypass config check
+os.environ['BOT_TOKEN'] = 'dummy_token'
+os.environ['GROUP_ID'] = 'dummy_group_id'
+
 # Add src to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+# Mock environment variables for config
+os.environ['BOT_TOKEN'] = 'test_token'
+os.environ['GROUP_ID'] = 'test_group'
 
 from src.rss_service import RSSService
 
@@ -38,12 +46,25 @@ class TestRSSService(unittest.TestCase):
         if os.path.exists(self.test_db):
             try:
                 os.remove(self.test_db)
-            except PermissionError:
-                pass # Silently fail if still locked
+            except OSError:
+                pass
+
+        # Cleanup WAL files
+        if os.path.exists(f"{self.test_db}-shm"):
+            try:
+                os.remove(f"{self.test_db}-shm")
+            except OSError:
+                pass
+        if os.path.exists(f"{self.test_db}-wal"):
+            try:
+                os.remove(f"{self.test_db}-wal")
+            except OSError:
+                pass
+
         if os.path.exists(self.test_json):
             try:
                 os.remove(self.test_json)
-            except PermissionError:
+            except OSError:
                 pass
 
     def test_init_db(self):
@@ -139,7 +160,7 @@ class TestRSSService(unittest.TestCase):
     def test_migration(self):
         # Create a dummy json file
         data = ["old_id_1", "old_id_2"]
-        with open(self.test_json, 'w') as f:
+        with open(self.test_json, 'w', encoding='utf-8') as f:
             json.dump(data, f)
 
         # Re-init service to trigger migration
