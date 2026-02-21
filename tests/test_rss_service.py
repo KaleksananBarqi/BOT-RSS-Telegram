@@ -160,7 +160,7 @@ class TestRSSService(unittest.TestCase):
     def test_migration(self):
         # Create a dummy json file
         data = ["old_id_1", "old_id_2"]
-        with open(self.test_json, 'w') as f:
+        with open(self.test_json, 'w', encoding='utf-8') as f:
             json.dump(data, f)
 
         # Re-init service to trigger migration

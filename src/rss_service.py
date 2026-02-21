@@ -55,7 +55,7 @@ class RSSService:
                 if count == 0:
                     logger.info("Migrating history from JSON to SQLite...")
                     try:
-                        with open(self.json_history_file, 'r') as f:
+                        with open(self.json_history_file, 'r', encoding='utf-8') as f:
                             history = json.load(f)
                             if isinstance(history, list):
                                 for item in history:
