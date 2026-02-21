@@ -2,6 +2,7 @@ import feedparser
 import json
 import os
 import ssl
+import urllib.request
 import aiohttp
 import asyncio
 import logging
@@ -68,7 +69,7 @@ class RSSService:
                 if count == 0:
                     logger.info("Migrating history from JSON to SQLite...")
                     try:
-                        with open(self.json_history_file, 'r') as f:
+                        with open(self.json_history_file, 'r', encoding='utf-8') as f:
                             history = json.load(f)
                             if isinstance(history, list):
                                 for item in history:
@@ -207,6 +208,12 @@ class RSSService:
         if hasattr(self, 'conn') and self.conn:
             self.conn.close()
 
+    def _fetch_feed_blocking(self, url, timeout=30):
+        """Helper blocking untuk mengambil feed dengan timeout."""
+        req = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            return response.read()
+
     async def fetch_feed(self, url):
         """Mengambil dan memparsing data RSS dengan aiohttp + headers."""
         logger.info(f"Fetching feed from: {url}")
@@ -226,7 +233,7 @@ class RSSService:
             async with session.get(url, headers=headers, timeout=15) as response:
                 if response.status == 200:
                     content = await response.read()
-                    loop = asyncio.get_event_loop()
+                    loop = asyncio.get_running_loop()
                     feed = await loop.run_in_executor(None, feedparser.parse, content)
                 elif response.status in [403, 429]:
                     logger.warning(f"Warning: Access denied (HTTP {response.status}). Site might be blocking bots.")
@@ -237,10 +244,11 @@ class RSSService:
 
         except Exception as e:
             logger.error(f"Error fetching feed via aiohttp: {e}")
-            # Fallback ke feedparser standard jika gagal total (blocking, run in executor)
+            # Fallback ke urllib dengan timeout jika gagal total (blocking, run in executor)
             try:
                 loop = asyncio.get_event_loop()
-                feed = await loop.run_in_executor(None, feedparser.parse, url)
+                content = await loop.run_in_executor(None, self._fetch_feed_blocking, url)
+                feed = await loop.run_in_executor(None, feedparser.parse, content)
             except Exception as e2:
                 logger.error(f"Fallback failed: {e2}")
                 return []
