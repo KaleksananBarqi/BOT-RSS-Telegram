@@ -13,6 +13,7 @@ from contextlib import contextmanager
 from config.config import USER_AGENT
 
 
+
 logger = logging.getLogger(__name__)
 
 class RSSService:
@@ -241,6 +242,9 @@ class RSSService:
                     logger.warning(f"Warning: Failed to fetch feed (HTTP {response.status})")
                     return []
 
+        except (aiohttp.ClientConnectorSSLError, aiohttp.ServerFingerprintMismatch) as e:
+            logger.error(f"SSL Verification failed for {url}: {e}")
+            return []
         except Exception as e:
             logger.error(f"Error fetching feed via aiohttp: {e}")
             # Fallback ke urllib dengan timeout jika gagal total (blocking, run in executor)
