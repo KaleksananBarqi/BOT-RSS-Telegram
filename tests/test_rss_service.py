@@ -4,6 +4,7 @@ import shutil
 import sqlite3
 import sys
 import json
+import asyncio
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
@@ -12,8 +13,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.rss_service import RSSService
 
-class TestRSSService(unittest.TestCase):
-    def setUp(self):
+class TestRSSService(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
         # Use a temporary DB file for testing
         self.test_db = 'tests/test_bot.db'
         self.test_json = 'tests/test_history.json'
@@ -25,15 +26,13 @@ class TestRSSService(unittest.TestCase):
             os.remove(self.test_json)
 
         self.rss_service = RSSService(db_file=self.test_db, json_history_file=self.test_json)
+        await self.rss_service.init()
 
-    def tearDown(self):
+    async def asyncTearDown(self):
         # Cleanup
         if hasattr(self, 'rss_service'):
             # Close connection if it exists
-            if self.rss_service.conn:
-                self.rss_service.conn.close()
-            # Note: We can't easily await rss_service.close() here because it's synchronous tearDown
-            # But conn.close() should be enough for file deletion
+            await self.rss_service.close()
         
         if os.path.exists(self.test_db):
             try:
@@ -45,27 +44,33 @@ class TestRSSService(unittest.TestCase):
                 os.remove(self.test_json)
             except PermissionError:
                 pass
+        # Cleanup WAL/SHM files if any
+        if os.path.exists(self.test_db + "-wal"):
+            os.remove(self.test_db + "-wal")
+        if os.path.exists(self.test_db + "-shm"):
+            os.remove(self.test_db + "-shm")
 
-    def test_init_db(self):
+    async def test_init_db(self):
         """Test if DB is created."""
         self.assertTrue(os.path.exists(self.test_db))
+        # Verify using standard sqlite3 to ensure file integrity
         conn = sqlite3.connect(self.test_db)
         c = conn.cursor()
         c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='history'")
         self.assertIsNotNone(c.fetchone())
         conn.close()
 
-    def test_is_new_and_mark_as_read(self):
+    async def test_is_new_and_mark_as_read(self):
         entry_id = "test_entry_1"
 
         # Should be new initially
-        self.assertTrue(self.rss_service.is_new(entry_id))
+        self.assertTrue(await self.rss_service.is_new(entry_id))
 
         # Mark as read
-        self.rss_service.mark_as_read(entry_id)
+        await self.rss_service.mark_as_read(entry_id)
 
         # Should not be new anymore
-        self.assertFalse(self.rss_service.is_new(entry_id))
+        self.assertFalse(await self.rss_service.is_new(entry_id))
 
     def test_extract_image(self):
         # Helper class to simulate feedparser entry
@@ -136,7 +141,7 @@ class TestRSSService(unittest.TestCase):
         self.assertIn(e1, filtered)
         self.assertNotIn(e2, filtered)
 
-    def test_migration(self):
+    async def test_migration(self):
         # Create a dummy json file
         data = ["old_id_1", "old_id_2"]
         with open(self.test_json, 'w') as f:
@@ -144,16 +149,18 @@ class TestRSSService(unittest.TestCase):
 
         # Re-init service to trigger migration
         # We need to make sure DB is empty/deleted first
+        await self.rss_service.close()
         if os.path.exists(self.test_db):
             os.remove(self.test_db)
 
         service = RSSService(db_file=self.test_db, json_history_file=self.test_json)
+        await service.init()
 
-        self.assertFalse(service.is_new("old_id_1"))
-        self.assertFalse(service.is_new("old_id_2"))
-        self.assertTrue(service.is_new("new_id"))
+        self.assertFalse(await service.is_new("old_id_1"))
+        self.assertFalse(await service.is_new("old_id_2"))
+        self.assertTrue(await service.is_new("new_id"))
         
-        service.conn.close()
+        await service.close()
 
 if __name__ == '__main__':
     unittest.main()

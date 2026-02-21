@@ -5,7 +5,7 @@ import ssl
 import aiohttp
 import asyncio
 import logging
-import sqlite3
+import aiosqlite
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta, timezone
 from config.config import USER_AGENT
@@ -22,34 +22,39 @@ class RSSService:
         self.db_file = db_file
         self.json_history_file = json_history_file
         self.session = None
+        self.conn = None
         os.makedirs(os.path.dirname(self.db_file), exist_ok=True)
-        self.conn = sqlite3.connect(self.db_file, check_same_thread=False)
-        self.conn.execute("PRAGMA journal_mode=WAL;")
-        self.conn.execute("PRAGMA synchronous=NORMAL;")
-        self._init_db()
-        self._migrate_json_to_db()
 
-    def _init_db(self):
+    async def init(self):
+        """Initializes the async database connection."""
+        try:
+            self.conn = await aiosqlite.connect(self.db_file)
+            await self.conn.execute("PRAGMA journal_mode=WAL;")
+            await self.conn.execute("PRAGMA synchronous=NORMAL;")
+            await self.conn.commit()
+            await self._init_db()
+            await self._migrate_json_to_db()
+        except Exception as e:
+            logger.error(f"Failed to initialize database connection: {e}")
+
+    async def _init_db(self):
         """Inisialisasi database SQLite."""
         try:
-            c = self.conn.cursor()
-            c.execute('''CREATE TABLE IF NOT EXISTS history
+            await self.conn.execute('''CREATE TABLE IF NOT EXISTS history
                          (id TEXT PRIMARY KEY, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
             # Optional: Index on created_at if we want to prune later
-            c.execute('''CREATE INDEX IF NOT EXISTS idx_created_at ON history(created_at)''')
-            self.conn.commit()
+            await self.conn.execute('''CREATE INDEX IF NOT EXISTS idx_created_at ON history(created_at)''')
+            await self.conn.commit()
         except Exception as e:
             logger.error(f"Failed to initialize database: {e}")
 
-    def _migrate_json_to_db(self):
+    async def _migrate_json_to_db(self):
         """Migrasi data dari JSON lama ke SQLite jika ada."""
         if os.path.exists(self.json_history_file):
-            c = self.conn.cursor()
-
-            # Cek apakah DB masih kosong (hanya migrasi jika kosong/baru)
             try:
-                c.execute("SELECT count(*) FROM history")
-                count = c.fetchone()[0]
+                async with self.conn.execute("SELECT count(*) FROM history") as cursor:
+                    row = await cursor.fetchone()
+                    count = row[0]
 
                 if count == 0:
                     logger.info("Migrating history from JSON to SQLite...")
@@ -58,8 +63,8 @@ class RSSService:
                             history = json.load(f)
                             if isinstance(history, list):
                                 for item in history:
-                                    c.execute("INSERT OR IGNORE INTO history (id) VALUES (?)", (str(item),))
-                                self.conn.commit()
+                                    await self.conn.execute("INSERT OR IGNORE INTO history (id) VALUES (?)", (str(item),))
+                                await self.conn.commit()
                                 logger.info(f"Migration complete. Imported {len(history)} items.")
                             else:
                                 logger.warning("JSON history format invalid, skipping migration.")
@@ -68,25 +73,22 @@ class RSSService:
             except Exception as e:
                 logger.error(f"Migration check failed: {e}")
 
-    def is_new(self, entry_id):
+    async def is_new(self, entry_id):
         """Mengecek apakah berita ini baru."""
         try:
-            c = self.conn.cursor()
-            c.execute("SELECT 1 FROM history WHERE id = ?", (entry_id,))
-            return c.fetchone() is None
+            async with self.conn.execute("SELECT 1 FROM history WHERE id = ?", (entry_id,)) as cursor:
+                result = await cursor.fetchone()
+                return result is None
         except Exception as e:
             logger.error(f"Database error in is_new: {e}")
             return False
 
-    def filter_new_identifiers(self, identifiers):
+    async def filter_new_identifiers(self, identifiers):
         """Mengecek daftar identifier mana yang baru (belum ada di database)."""
         if not identifiers:
             return []
 
         try:
-            conn = sqlite3.connect(self.db_file)
-            c = conn.cursor()
-
             # Chunking to avoid SQLite variable limit (default 999)
             chunk_size = 900
             existing_ids = set()
@@ -97,11 +99,11 @@ class RSSService:
             for i in range(0, len(unique_identifiers), chunk_size):
                 chunk = unique_identifiers[i:i + chunk_size]
                 placeholders = ','.join(['?'] * len(chunk))
-                c.execute(f"SELECT id FROM history WHERE id IN ({placeholders})", chunk)
-                for row in c.fetchall():
-                    existing_ids.add(row[0])
 
-            conn.close()
+                async with self.conn.execute(f"SELECT id FROM history WHERE id IN ({placeholders})", chunk) as cursor:
+                     rows = await cursor.fetchall()
+                     for row in rows:
+                        existing_ids.add(row[0])
 
             # Return identifiers that are not in existing_ids, preserving original order if possible
             return [i for i in identifiers if i not in existing_ids]
@@ -109,7 +111,7 @@ class RSSService:
             logger.error(f"Database error in filter_new_identifiers: {e}")
             return identifiers
 
-    def get_new_entries(self, entries):
+    async def get_new_entries(self, entries):
         """Memfilter list of entries dan mengembalikan hanya yang baru."""
         if not entries:
             return []
@@ -121,17 +123,16 @@ class RSSService:
         # Gunakan list identifier untuk bulk check
         identifiers = [entry.get('id', entry.get('link')) for entry in entries_list]
 
-        new_ids = set(self.filter_new_identifiers(identifiers))
+        new_ids = set(await self.filter_new_identifiers(identifiers))
 
         # Return entries yang identifiernya ada di new_ids, tetap menjaga order input
         return [entry for entry in entries_list if entry.get('id', entry.get('link')) in new_ids]
 
-    def mark_as_read(self, entry_id):
+    async def mark_as_read(self, entry_id):
         """Menandai berita sebagai sudah dibaca/dikirim."""
         try:
-            c = self.conn.cursor()
-            c.execute("INSERT OR IGNORE INTO history (id) VALUES (?)", (entry_id,))
-            self.conn.commit()
+            await self.conn.execute("INSERT OR IGNORE INTO history (id) VALUES (?)", (entry_id,))
+            await self.conn.commit()
         except Exception as e:
             logger.error(f"Failed to save history: {e}")
 
@@ -197,7 +198,7 @@ class RSSService:
         if self.session:
             await self.session.close()
         if hasattr(self, 'conn') and self.conn:
-            self.conn.close()
+            await self.conn.close()
 
     async def fetch_feed(self, url):
         """Mengambil dan memparsing data RSS dengan aiohttp + headers."""

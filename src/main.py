@@ -34,6 +34,7 @@ async def main():
     logger.info("Bot RSS Telegram Starting...")
     
     rss_service = RSSService()
+    await rss_service.init()
     bot_service = BotService()
 
     logger.info(f"Monitoring {len(RSS_URLS)} Feeds...")
@@ -52,7 +53,7 @@ async def main():
                     entries = rss_service.filter_entries_by_age(entries, MAX_NEWS_AGE_HOURS)
 
                     # Process entries from oldest to newest
-                    new_entries = rss_service.get_new_entries(reversed(entries))
+                    new_entries = await rss_service.get_new_entries(reversed(entries))
 
                     if new_entries:
                         logger.info(f"[{url}] Found {len(new_entries)} new articles.")
@@ -67,7 +68,7 @@ async def main():
                             success = await bot_service.send_post(parsed_data)
 
                             if success:
-                                rss_service.mark_as_read(identifier)
+                                await rss_service.mark_as_read(identifier)
                                 await asyncio.sleep(DELAY_BETWEEN_POSTS)
                             else:
                                 logger.error(f"Failed to send: {identifier}")
