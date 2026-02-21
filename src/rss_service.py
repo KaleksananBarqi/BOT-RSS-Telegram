@@ -218,7 +218,7 @@ class RSSService:
             async with session.get(url, headers=headers, timeout=15) as response:
                 if response.status == 200:
                     content = await response.read()
-                    loop = asyncio.get_event_loop()
+                    loop = asyncio.get_running_loop()
                     feed = await loop.run_in_executor(None, feedparser.parse, content)
                 elif response.status in [403, 429]:
                     logger.warning(f"Warning: Access denied (HTTP {response.status}). Site might be blocking bots.")
@@ -231,7 +231,7 @@ class RSSService:
             logger.error(f"Error fetching feed via aiohttp: {e}")
             # Fallback ke feedparser standard jika gagal total (blocking, run in executor)
             try:
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 feed = await loop.run_in_executor(None, feedparser.parse, url)
             except Exception as e2:
                 logger.error(f"Fallback failed: {e2}")
@@ -242,8 +242,8 @@ class RSSService:
 
         return feed.entries if feed else []
 
-    def parse_entry(self, entry):
-        """Membersihkan dan memformat data entry."""
+    def _parse_entry_sync(self, entry):
+        """Membersihkan dan memformat data entry (synchronous worker)."""
         image_url = self.extract_image(entry)
         
         raw_summary = entry.get('summary', '') or entry.get('description', '')
@@ -258,3 +258,8 @@ class RSSService:
             'summary': clean_summary,
             'image_url': image_url
         }
+
+    async def parse_entry(self, entry):
+        """Asynchronous wrapper for parsing entry."""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self._parse_entry_sync, entry)

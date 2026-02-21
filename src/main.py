@@ -60,7 +60,7 @@ async def main():
                         for entry in new_entries:
                             if not running: break
 
-                            parsed_data = rss_service.parse_entry(entry)
+                            parsed_data = await rss_service.parse_entry(entry)
                             identifier = parsed_data['id']
 
                             # Send to Telegram
