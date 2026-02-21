@@ -126,14 +126,22 @@ class RSSService:
         # Return entries yang identifiernya ada di new_ids, tetap menjaga order input
         return [entry for entry in entries_list if entry.get('id', entry.get('link')) in new_ids]
 
-    def mark_as_read(self, entry_id):
+    def mark_as_read(self, entry_id, commit=True):
         """Menandai berita sebagai sudah dibaca/dikirim."""
         try:
             c = self.conn.cursor()
             c.execute("INSERT OR IGNORE INTO history (id) VALUES (?)", (entry_id,))
-            self.conn.commit()
+            if commit:
+                self.conn.commit()
         except Exception as e:
             logger.error(f"Failed to save history: {e}")
+
+    def commit(self):
+        """Melakukan commit manual ke database."""
+        try:
+            self.conn.commit()
+        except Exception as e:
+            logger.error(f"Failed to commit transaction: {e}")
 
     def extract_image(self, entry):
         """Mencoba mengekstrak gambar dari entry RSS."""

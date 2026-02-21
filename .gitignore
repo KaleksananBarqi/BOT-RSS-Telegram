@@ -37,3 +37,6 @@ data/history.json
 data/bot.db
 tests/test_bot.db
 tests/test_history.json
+*.db
+*.db-shm
+*.db-wal

@@ -40,6 +40,9 @@ async def main():
     logger.info("Press Ctrl+C to stop.")
 
     try:
+        BATCH_SIZE = 10
+        uncommitted_count = 0
+
         while running:
             try:
                 for url in RSS_URLS:
@@ -67,15 +70,33 @@ async def main():
                             success = await bot_service.send_post(parsed_data)
 
                             if success:
-                                rss_service.mark_as_read(identifier)
+                                rss_service.mark_as_read(identifier, commit=False)
+                                uncommitted_count += 1
+
+                                if uncommitted_count >= BATCH_SIZE:
+                                    rss_service.commit()
+                                    uncommitted_count = 0
+
                                 await asyncio.sleep(DELAY_BETWEEN_POSTS)
                             else:
                                 logger.error(f"Failed to send: {identifier}")
                     else:
                         pass
+
+                # Commit any remaining items after checking all URLs
+                if uncommitted_count > 0:
+                    rss_service.commit()
+                    uncommitted_count = 0
             
             except Exception as e:
                 logger.error(f"An error occurred in main loop: {e}", exc_info=True)
+                # Try to commit what we have so far
+                if uncommitted_count > 0:
+                    try:
+                        rss_service.commit()
+                        uncommitted_count = 0
+                    except Exception:
+                        pass
                 await asyncio.sleep(5)
 
             # Wait for next check cycle
