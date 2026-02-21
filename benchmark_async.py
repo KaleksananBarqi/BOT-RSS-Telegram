@@ -25,7 +25,7 @@ async def background_task():
     return delays
 
 async def run_parsing(use_executor=False):
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     start = time.perf_counter()
     if use_executor:
         await loop.run_in_executor(None, feedparser.parse, dummy_xml)
