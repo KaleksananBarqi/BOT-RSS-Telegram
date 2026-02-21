@@ -11,9 +11,6 @@ from datetime import datetime, timedelta, timezone
 from config.config import USER_AGENT
 
 
-# Workaround for SSL issues on some systems
-if hasattr(ssl, '_create_unverified_context'):
-    ssl._create_default_https_context = ssl._create_unverified_context
 
 logger = logging.getLogger(__name__)
 
@@ -227,6 +224,9 @@ class RSSService:
                     logger.warning(f"Warning: Failed to fetch feed (HTTP {response.status})")
                     return []
 
+        except (aiohttp.ClientConnectorSSLError, aiohttp.ServerFingerprintMismatch) as e:
+            logger.error(f"SSL Verification failed for {url}: {e}")
+            return []
         except Exception as e:
             logger.error(f"Error fetching feed via aiohttp: {e}")
             # Fallback ke feedparser standard jika gagal total (blocking, run in executor)
