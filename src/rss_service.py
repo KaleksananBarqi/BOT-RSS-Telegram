@@ -11,10 +11,6 @@ from datetime import datetime, timedelta, timezone
 from config.config import USER_AGENT
 
 
-# Workaround for SSL issues on some systems
-if hasattr(ssl, '_create_unverified_context'):
-    ssl._create_default_https_context = ssl._create_unverified_context
-
 logger = logging.getLogger(__name__)
 
 class RSSService:
