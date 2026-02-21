@@ -1,3 +1,4 @@
+import aiosqlite
 import feedparser
 import json
 import os
@@ -6,10 +7,8 @@ import urllib.request
 import aiohttp
 import asyncio
 import logging
-import sqlite3
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta, timezone
-from contextlib import contextmanager
 from config.config import USER_AGENT
 
 
@@ -21,122 +20,109 @@ class RSSService:
         self.json_history_file = json_history_file
         self.session = None
         os.makedirs(os.path.dirname(self.db_file), exist_ok=True)
-        self.conn = sqlite3.connect(self.db_file, check_same_thread=False)
-        self.conn.execute("PRAGMA journal_mode=WAL;")
-        self.conn.execute("PRAGMA synchronous=NORMAL;")
-        self._init_db()
-        self._migrate_json_to_db()
+        self.conn = None
 
-    @contextmanager
-    def _get_cursor(self):
-        """Context manager untuk mendapatkan database cursor."""
-        cursor = self.conn.cursor()
-        try:
-            yield cursor
-            self.conn.commit()
-        except Exception:
-            self.conn.rollback()
-            raise
-        finally:
-            cursor.close()
+    async def initialize(self):
+        """Async initialization - must be called after construction."""
+        self.conn = await aiosqlite.connect(self.db_file)
+        await self.conn.execute("PRAGMA journal_mode=WAL;")
+        await self.conn.execute("PRAGMA synchronous=NORMAL;")
+        await self._create_tables()
+        await self._migrate_json_to_db()
 
-    def _init_db(self):
-        """Inisialisasi database SQLite."""
+    async def _create_tables(self):
+        """Create database tables."""
         try:
-            with self._get_cursor() as c:
-                c.execute('''CREATE TABLE IF NOT EXISTS history
-                             (id TEXT PRIMARY KEY, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-                # Optional: Index on created_at if we want to prune later
-                c.execute('''CREATE INDEX IF NOT EXISTS idx_created_at ON history(created_at)''')
+            await self.conn.execute('''CREATE TABLE IF NOT EXISTS history
+                         (id TEXT PRIMARY KEY, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+            await self.conn.execute('''CREATE INDEX IF NOT EXISTS idx_created_at ON history(created_at)''')
         except Exception as e:
             logger.error(f"Failed to initialize database: {e}")
 
-    def _migrate_json_to_db(self):
+    async def _migrate_json_to_db(self):
         """Migrasi data dari JSON lama ke SQLite jika ada."""
         if not os.path.exists(self.json_history_file):
             return
 
         try:
-            with self._get_cursor() as c:
-                # Cek apakah DB masih kosong (hanya migrasi jika kosong/baru)
-                c.execute("SELECT count(*) FROM history")
-                count = c.fetchone()[0]
+            cursor = await self.conn.cursor()
+            await cursor.execute("SELECT count(*) FROM history")
+            count = (await cursor.fetchone())[0]
 
-                if count == 0:
-                    logger.info("Migrating history from JSON to SQLite...")
-                    try:
-                        with open(self.json_history_file, 'r', encoding='utf-8') as f:
-                            history = json.load(f)
-                            if isinstance(history, list):
-                                for item in history:
-                                    c.execute("INSERT OR IGNORE INTO history (id) VALUES (?)", (str(item),))
-                                logger.info(f"Migration complete. Imported {len(history)} items.")
-                            else:
-                                logger.warning("JSON history format invalid, skipping migration.")
-                    except (json.JSONDecodeError, IOError) as e:
-                        logger.error(f"Failed to read JSON history for migration: {e}")
+            if count == 0:
+                logger.info("Migrating history from JSON to SQLite...")
+                try:
+                    with open(self.json_history_file, 'r', encoding='utf-8') as f:
+                        history = json.load(f)
+                        if isinstance(history, list):
+                            for item in history:
+                                await cursor.execute("INSERT OR IGNORE INTO history (id) VALUES (?)", (str(item),))
+                            await self.conn.commit()
+                            logger.info(f"Migration complete. Imported {len(history)} items.")
+                        else:
+                            logger.warning("JSON history format invalid, skipping migration.")
+                except (json.JSONDecodeError, IOError) as e:
+                    logger.error(f"Failed to read JSON history for migration: {e}")
+            await cursor.close()
         except Exception as e:
             logger.error(f"Migration check failed: {e}")
 
-    def is_new(self, entry_id):
+    async def is_new(self, entry_id):
         """Mengecek apakah berita ini baru."""
         try:
-            with self._get_cursor() as c:
-                c.execute("SELECT 1 FROM history WHERE id = ?", (entry_id,))
-                return c.fetchone() is None
+            cursor = await self.conn.cursor()
+            await cursor.execute("SELECT 1 FROM history WHERE id = ?", (entry_id,))
+            result = await cursor.fetchone()
+            await cursor.close()
+            return result is None
         except Exception as e:
             logger.error(f"Database error in is_new: {e}")
             return False
 
-    def filter_new_identifiers(self, identifiers):
+    async def filter_new_identifiers(self, identifiers):
         """Mengecek daftar identifier mana yang baru (belum ada di database)."""
         if not identifiers:
             return []
 
         try:
-            # Chunking to avoid SQLite variable limit (default 999)
             chunk_size = 900
             existing_ids = set()
 
-            # Remove duplicates from input list to optimize query
             unique_identifiers = list(dict.fromkeys(identifiers))
 
-            with self._get_cursor() as c:
-                for i in range(0, len(unique_identifiers), chunk_size):
-                    chunk = unique_identifiers[i:i + chunk_size]
-                    placeholders = ','.join(['?'] * len(chunk))
-                    c.execute(f"SELECT id FROM history WHERE id IN ({placeholders})", chunk)
-                    for row in c.fetchall():
-                        existing_ids.add(row[0])
+            cursor = await self.conn.cursor()
+            for i in range(0, len(unique_identifiers), chunk_size):
+                chunk = unique_identifiers[i:i + chunk_size]
+                placeholders = ','.join(['?'] * len(chunk))
+                await cursor.execute(f"SELECT id FROM history WHERE id IN ({placeholders})", chunk)
+                rows = await cursor.fetchall()
+                for row in rows:
+                    existing_ids.add(row[0])
+            await cursor.close()
 
-            # Return identifiers that are not in existing_ids, preserving original order if possible
             return [i for i in identifiers if i not in existing_ids]
         except Exception as e:
             logger.error(f"Database error in filter_new_identifiers: {e}")
             return identifiers
 
-    def get_new_entries(self, entries):
+    async def get_new_entries(self, entries):
         """Memfilter list of entries dan mengembalikan hanya yang baru."""
         if not entries:
             return []
 
-        # Kita butuh list agar bisa diiterasi berulang atau diakses indexnya
         entries_list = list(entries)
 
-        # Map entries to their identifiers
-        # Gunakan list identifier untuk bulk check
         identifiers = [entry.get('id', entry.get('link')) for entry in entries_list]
 
-        new_ids = set(self.filter_new_identifiers(identifiers))
+        new_ids = set(await self.filter_new_identifiers(identifiers))
 
-        # Return entries yang identifiernya ada di new_ids, tetap menjaga order input
         return [entry for entry in entries_list if entry.get('id', entry.get('link')) in new_ids]
 
-    def mark_as_read(self, entry_id):
+    async def mark_as_read(self, entry_id):
         """Menandai berita sebagai sudah dibaca/dikirim."""
         try:
-            with self._get_cursor() as c:
-                c.execute("INSERT OR IGNORE INTO history (id) VALUES (?)", (entry_id,))
+            await self.conn.execute("INSERT OR IGNORE INTO history (id) VALUES (?)", (entry_id,))
+            await self.conn.commit()
         except Exception as e:
             logger.error(f"Failed to save history: {e}")
 
@@ -202,7 +188,7 @@ class RSSService:
         if self.session:
             await self.session.close()
         if hasattr(self, 'conn') and self.conn:
-            self.conn.close()
+            await self.conn.close()
 
     def _fetch_feed_blocking(self, url, timeout=30):
         """Helper blocking untuk mengambil feed dengan timeout."""

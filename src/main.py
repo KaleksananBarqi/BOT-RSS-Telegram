@@ -40,6 +40,7 @@ class RSSBot:
         logger.info("Bot RSS Telegram Starting...")
 
         self.rss_service = RSSService()
+        await self.rss_service.initialize()
         self.bot_service = BotService()
 
         logger.info(f"Monitoring {len(RSS_URLS)} Feeds...")
@@ -58,7 +59,7 @@ class RSSBot:
                         entries = self.rss_service.filter_entries_by_age(entries, MAX_NEWS_AGE_HOURS)
 
                         # Process entries from oldest to newest
-                        new_entries = self.rss_service.get_new_entries(reversed(entries))
+                        new_entries = await self.rss_service.get_new_entries(reversed(entries))
 
                         if new_entries:
                             logger.info(f"[{url}] Found {len(new_entries)} new articles.")
@@ -73,7 +74,7 @@ class RSSBot:
                                 success = await self.bot_service.send_post(parsed_data)
 
                                 if success:
-                                    self.rss_service.mark_as_read(identifier)
+                                    await self.rss_service.mark_as_read(identifier)
                                     await asyncio.sleep(DELAY_BETWEEN_POSTS)
                                 else:
                                     logger.error(f"Failed to send: {identifier}")
@@ -126,7 +127,7 @@ async def process_feed(url, rss_service, bot_service):
     entries = rss_service.filter_entries_by_age(entries, MAX_NEWS_AGE_HOURS)
 
     # Process entries from oldest to newest
-    new_entries = rss_service.get_new_entries(reversed(entries))
+    new_entries = await rss_service.get_new_entries(reversed(entries))
 
     if new_entries:
         logger.info(f"[{url}] Found {len(new_entries)} new articles.")
@@ -141,7 +142,7 @@ async def process_feed(url, rss_service, bot_service):
             success = await bot_service.send_post(parsed_data)
 
             if success:
-                rss_service.mark_as_read(identifier)
+                await rss_service.mark_as_read(identifier)
                 await asyncio.sleep(DELAY_BETWEEN_POSTS)
             else:
                 logger.error(f"Failed to send: {identifier}")
