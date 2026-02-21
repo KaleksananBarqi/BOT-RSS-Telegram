@@ -149,7 +149,7 @@ class RSSService:
                     return media['url']
         
         # 2. Cek Media Thumbnail
-        if 'media_thumbnail' in entry:
+        if 'media_thumbnail' in entry and entry.media_thumbnail:
             return entry.media_thumbnail[0]['url']
 
         # 3. Cek Enclosures
